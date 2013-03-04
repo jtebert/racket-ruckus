@@ -117,6 +117,14 @@
 (define CG (new bp% C G))
 (define GC (new bp% G C))
 
+(define -A (new bp% MT A))
+(define -T (new bp% MT T))
+(define -C (new bp% MT C))
+(define -G (new bp% MT G))
+(define A- (new bp% A MT))
+(define T- (new bp% T MT))
+(define C- (new bp% C MT))
+(define G- (new bp% G MT))
 
 ; A SingleStrand is a (new 1strand% [Listof Base])
 ; Where Bases are in 5' -> 3' order
@@ -152,6 +160,20 @@
   (check-expect (s1-2 . reverse-strand) empty)
   (check-expect (s1-3 . reverse-strand) (list A T A T))
   
+  ; remove-nb : -> SingleStrand
+  ; Remove the empty bases from the strand
+  (define (remove-nb)
+    (new 1strand%
+         (filter (λ (b) (not (b . empty?)))
+                 (this . bases))))
+  
+  (check-expect ((new 1strand% (list MT MT C G T)) . remove-nb)
+                (new 1strand% (list C G T)))
+  (check-expect ((new 1strand% (list C G T MT MT)) . remove-nb)
+                (new 1strand% (list C G T)))
+  (check-expect ((new 1strand% (list MT C A MT G T)) . remove-nb)
+                (new 1strand% (list C A G T)))
+  
   ; restrict : RestrictionEnzyme -> Genome or SingleStrand
   ; Cut the Strand into pieces if it has the rec-site
   )
@@ -174,6 +196,7 @@
   
   ; 5-3-strand : String -> SingleStrand
   ; Get the 5' -> 3' strand out of the double strand
+  ; Eliminate empty bases on ends
   (define (5-3-strand)
     (new 1strand%
          (map (λ (bp) (bp . 5->3))
@@ -186,33 +209,70 @@
   
   ; 3-5-strand : String -> SingleStrand
   ; Get the 3' -> 5' strand out of the double strand
+  ; Reversed to be presented in 5' -> 3' format (match data definition)
+  ; Eliminate empty bases on ends
   (define (3-5-strand)
     (new 1strand%
-         (map (λ (bp) (bp . 3->5))
-              (this . bps))))
+         ((new 1strand%
+               (map (λ (bp) (bp . 3->5))
+                    (this . bps))) . reverse-strand)))
+  
+  (check-expect (s2-1 . 3-5-strand)
+                (new 1strand% (list C C A T G)))
+  (check-expect (s2-2 . 3-5-strand) s1-2)
+  (check-expect (s2-3 . 3-5-strand)
+                (new 1strand% (list T)))
   
   ; anneal : -> Genome
   ; Split the DoubleStrand into 2 SingleStrands
   ; (list 5->3 3->5)
   (define (anneal)
-      (list ((this . 5-3-strand)
-             (this . 3-5-strand))))
-  (check-expect (s2-1 . 3-5-strand)
-                (new 1strand% (list G T A C C)))
-  (check-expect (s2-2 . 3-5-strand) s1-2)
-  (check-expect (s2-3 . 3-5-strand)
-                (new 1strand% (list T)))
+      (list (this . 5-3-strand)
+            (this . 3-5-strand)))
+  
+  (check-expect (s2-1 . anneal)
+                (list (new 1strand% (list C A T G G))
+                      (new 1strand% (list C C A T G))))
+  (check-expect (s2-2 . anneal)
+                (list (new 1strand% empty)
+                      (new 1strand% empty)))
     
-  ; overhang-3' : -> [Listof Base]
-  ; Give the 3' overhang of the fragment, if any
+  ; 3-oh-lead : -> SingleStrand
+  ; Give the 3' overhang of the leading end of the double strand
+  ; Returns empty if blunt ends
+  (define (3-oh-lead)
+    (local [(define (base-list bps)
+              (cond [(empty? bps)
+                     empty]
+                    [((first bps) . 5->3 . empty?)
+                     (cons ((first bps) . 3->5)
+                           (base-list (rest bps)))]
+                    [else empty]))]
+      (new 1strand% (base-list (this . bps)))))
   
+  (check-expect (s2-1 . 3-oh-lead)
+                (new 1strand% empty))
+  (check-expect (s2-3ohl . 3-oh-lead)
+                (new 1strand% (list A A T G)))
+  (check-expect (s2-5ohl . 3-oh-lead)
+                (new 1strand% empty))
+  (check-expect (s2-3ohl . 3-oh-lead)
+                (new 1strand% (list A A T G)))
   
-  ; overhang-5' : -> [Listof Base]
+  ; 3-oh-tail : -> SingleStrand
+  ; Give the 3' overhang of end of the double strand
+  ; Returns empty if blunt ends
+  #;(define (3-oh-tail)
+    (cond [(empty? (this . bps))
+           (new 1strand% empty)]
+          []))
+  
+  ; overhang-5' : -> SingleStrand
   ; Give the 5' overhang of the fragment, if any
   
   ; restrict : RestrictionEnzyme -> Genome or DoubleStrand
   ; Cut the DoubleStrand according to the enzyme as many times as necessary
-  ; Return this if cut-site nott present
+  ; Return this if cut-site not present
   )
 
 ; Examples:
@@ -223,6 +283,14 @@
                   (list AT)))
 (define s2-4 (new 2strand%
                   (list AT TA)))
+(define s2-3ohl (new 2strand%
+                    (list -A -A -T -G AT CG TA)))
+(define s2-5ohl (new 2strand%
+                    (list A- C- G- GC TA)))
+(define s2-3oht (new 2strand%
+                     (list AT CG A- T-)))
+(define s2-5oht (new 2strand%
+                     (list TA AT GC -T -T -T)))
 
 
 ; A SuperGenome is a (new super-gen%)

@@ -1,24 +1,126 @@
 #lang class/2
+(require 2htdp/image class/universe)
 
 #|---------------------------------------
                CONSTANTS
 ---------------------------------------|#
 
 ;; PHYSICS CONSTANTS
+
+;; Number of pixels per foot in real curling dimensions
+(define PPF 20)
 ;; Frictional force
 ;; Effect of sweep (reduce curl, increase velocity)
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; DIMENSIONS (in pixels)
+
+;; Diameter of House (12')
+(define HOUSE-D (* 12 PPF))
+;; Radius of 12' (6')
+(define R-12FT (/ HOUSE-D 2))
+;; Radius of 8' (4')
+(define R-8FT (* 4 PPF))
+;; Radius of 4' (2')
+(define R-4FT (* 2 PPF))
+;; Radius of 1' (6")
+(define R-1FT (* .5 PPF))
+;; Width of sheet (14'2")
+(define WIDTH (* (+ 14 2/12) PPF))
+;; Length of sheet (146')
+(define LENGTH (* 146 PPF))
+;; Distance between hog lines
+(define MIDDLE-L (* 72 PPF))
+;; Distance from t to end of sheet
+(define D2B (* 16 PPF))
+;; Radius of stone
+(define STONE-R (* .5 PPF))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; POSITIONS (in pixels)
+;; All positions are relative to the top of the sheet (descriptives are from center of this house)
+;; THAT refers to throwing end of sheet
+;; THIS refers to target end of sheet
+
+;; Center line position (x-coordinate)
+(define CNTR-POS (/ WIDTH 2))
+
+;; This t-line (0')
+(define THIS-TLINE-POS D2B)
+;; This back-line (-6')
+(define THIS-BACKLINE-POS (+ D2B (* -.5 HOUSE-D)))
+;; This hack (-12')
+(define THIS-HACK-POS (+ D2B (* -12 PPF)))
+;; This hog line(21')
+(define THIS-HOG-POS (+ D2B (* 21 PPF)))
+
+;; That t-line (114')
+(define THAT-TLINE-POS (+ D2B (* 114 PPF)))
+;; That back-line (120')
+(define THAT-BACKLINE-POS (+ D2B (* 120 PPF)))
+;; That hack (126')
+(define THAT-HACK-POS (+ D2B (* 126 PPF)))
+;; That hog line(93')
+(define THAT-HOG-POS (+ D2B (* 93 PPF)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;; OTHER VALUES
-;; Diameter of House
+
 ;; Starting set of stones
+
 ;; Number of ends
+(define NUM-ENDS 8)
 ;; Number of stones per end
+(define NUM-STONES 8)
 ;; Dimensions of curling sheet
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;; IMAGES
+
 ;; The House (target)
+(define HOUSE-IMG
+  (overlay (circle R-1FT 'solid 'white)
+           (overlay (circle R-4FT 'solid 'red)
+                    (overlay (circle R-8FT 'solid 'white)
+                             (circle R-12FT 'solid 'blue)))))
+
+
+
 ;; Sheet - entire playing surface/in-bounds area
+; center line, this t-line, this hog line, this back line, 
+; that t-line, that hog line, that back line, that hack,
+; this house, that house, ice bg
+(define SHEET-IMG
+  (add-line
+   (add-line
+    (add-line
+     (add-line
+      (add-line
+       (add-line
+        (add-line
+         (place-image HOUSE-IMG
+                      CNTR-POS THIS-TLINE-POS
+                      (place-image HOUSE-IMG
+                                   CNTR-POS THAT-TLINE-POS
+                                   (rectangle WIDTH LENGTH 'solid 'white)))
+         0 THAT-BACKLINE-POS WIDTH THAT-BACKLINE-POS 'black)
+        0 THAT-HOG-POS WIDTH THAT-HOG-POS 'black)
+       0 THAT-TLINE-POS WIDTH THAT-TLINE-POS 'black)
+      0 THIS-BACKLINE-POS WIDTH THIS-BACKLINE-POS 'black)
+     0 THIS-HOG-POS WIDTH THIS-HOG-POS 'black)
+    0 THIS-TLINE-POS WIDTH THIS-TLINE-POS 'black)
+   CNTR-POS 0 CNTR-POS LENGTH 'black))
+
+
+SHEET-IMG
 ;; Scoreboard
+(define SCOREBOARD
+  (rectangle WIDTH (* 4.5 PPF) 'solid 'white))
+(define BOX (rectangle PPF (* 1.5 PPF) 'outline 'black))
 ;; Team 1 stone
 ;; Team 2 stone
 ;; Broom head (for sweeping)
@@ -27,24 +129,51 @@
             ACCESSORY CLASSES
 ---------------------------------------|#
 
-; A Posn is a (new posn% Number Number)
+;; A Posn is a (new posn% Number Number)
 (define-class posn%
   (fields x y))
 
-; A Scores is a (new scores% String [Listof Number] String [Listof Number])
-(define-class scores%
-  (fields team1-name team1-scores team2-names team2-scores)
-  
+
+;; A Score is a (new scores% String Number)
+;; Where name is the name of the team whose scored
+;;   and score is the number of points scored in that end
+(define-class score%
+  (fields name score)
+  #|
   ;; total-score : -> Number
   ;; Compute the total score for a team
+  (define (total-score)
+    (foldr (λ (s b) (+ s b))
+           0
+           (this . scores)))
+  (check-expect (score1 . total-score) 6)
+  (check-expect (score2 . total-score) 0)
   
-  ;; draw : Image -> Image
-  ;; Draw the scores on the scoreboard onto a given scene
+  ;; draw : Number Image -> Image
+  ;; Where line is 1 or 2
+  ;; Draw the scores on the scoreboard onto a given scene (scoreboard)
   
-  ;; winner : -> String
-  ;; Return the name of the winning team
+  ;; add-score : Number -> Score
+  ;; Add the new score to the end of the list of scores
+  (define (add-score n)
+    (new score%
+         (this . name)
+         (foldr (λ (s b) (cons s b))
+                (cons n empty)
+                (this . scores))))
+  
+  (check-expect (score1 . add-score 10)
+                (new score% "A" (list 1 2 3 10)))
+  (check-expect (score2 . add-score 10)
+                (new score% "B" (list 10)))
+|#
   )
 
+;; Examples
+(define score1
+  (new score% "A" (list 1 2 3)))
+(define score2
+  (new score% "B" empty))
 
 #|---------------------------------------
                  STONES

@@ -80,9 +80,6 @@
 ;; Width of a space on the scoreboard
 (define SCR-W (* PPF 1.25))
 
-;; Width of game window
-(define GAME-WIDTH (* 1.5 WIDTH))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; IMAGES
@@ -117,9 +114,16 @@
      0 THIS-HOG-POS WIDTH THIS-HOG-POS 'black)
     0 THIS-TLINE-POS WIDTH THIS-TLINE-POS 'black)
    CNTR-POS 0 CNTR-POS LENGTH 'black))
-
-
 SHEET-IMG
+
+;; Height of game window
+(define GAME-HEIGHT (* 2 WIDTH))
+;; Scaling factor for small sheet
+(define SCALE (/ GAME-HEIGHT LENGTH))
+;; Width of game window
+(define GAME-WIDTH
+  (+ WIDTH (* WIDTH SCALE)))
+
 ;; Scoreboard
 (define BOARD
   (place-image (rectangle GAME-WIDTH (* 1.5 PPF) 'solid 'blue)
@@ -131,15 +135,17 @@ SHEET-IMG
 (define SCOREBOARD
   (local [(define (add-num-line n base)
             (local [(define x (- GAME-WIDTH (* n SCR-W)))]
-              (add-line (place-image (text (number->string (- MAX-SCORE (sub1 n))) PPF 'black)
-                                     (+ x (/ SCR-W 2)) (* 2.25 PPF)
-                                     base)
-                        x 0 x (* 4.5 PPF) 'black)))]
+              (add-line
+               (place-image (text (number->string (- MAX-SCORE (sub1 n)))
+                                  PPF 'black)
+                            (+ x (/ SCR-W 2)) (* 2.25 PPF)
+                            base)
+               x 0 x (* 4.5 PPF) 'black)))]
     (foldr add-num-line
            BOARD
            (build-list MAX-SCORE
                        (λ (n) (add1 n))))))
-SCOREBOARD
+
 ;; Team 1 stone
 ;; Team 2 stone
 ;; Broom head (for sweeping)
@@ -154,10 +160,35 @@ BROOM-IMG
 (define-class posn%
   (fields x y)
   
-  ;; total : -> Number
-  ;; Total distance from 0 (if vel, net velocity
-  (define (total)
-    (sqrt (+ (sqr (this . x)) (sqr (this . y)))))
+  ;; add : Posn -> Posn
+  ;;; Vector addition of 2 posns
+  (define (add that)
+    (new posn%
+         (+ (this . x) (that . x))
+         (+ (that . y) (that . y))))
+  
+  ;; scale : Number -> Posn
+  ;; Vector scaling by given num
+  (define (scale num)
+    (new posn% (* (this . x) num)
+               (* (this . y) num)))
+  
+  ;; sub : Posn -> Posn
+  ;; Vector subtraction of that from this
+  (define (sub that)
+    (this . add (that . scale -1)))
+  
+  ;; distance : Posn -> Number
+  ;; Distance between this and that Posns
+  (define (distance that)
+    (sqrt (+ (sqr (- (this . x) (that . x)))
+             (sqr (- (this . y) (that . y))))))
+  
+  ;; to-from-vel : Posn Number -> Posn
+  ;;; Make a Posn going from THIS towards THAT at a given speed.
+  (define (to-from-vel that speed)
+    ((this . sub that) . scale
+                       (/ speed (this . distance that))))
   )
 
 
@@ -202,7 +233,8 @@ BROOM-IMG
   ;; Draw the scores onto the scoreboard (team1 on top, team2 on bottom)
   (define (draw-scores team1 team2)
     (local [(define name-width (* 0.9 (- GAME-WIDTH (* MAX-SCORE SCR-W))))
-            (define (team-txt team) ;; Create image of team name, no wider than name-width
+            (define (team-txt team)
+              ;; Create image of team name, no wider than name-width
               (foldr (λ (n base)
                        (if (< (image-width (text team n 'white))
                               name-width)
@@ -211,17 +243,20 @@ BROOM-IMG
                      (text team PPF 'white)
                      (build-list PPF (λ (x) (add1 x)))))
             (define (draw-score scr bg)
-              (place-image (overlay (text (number->string (scr . end)) PPF 'black)
-                                    (rectangle (* .9 PPF) (* .9 SCR-W) 'solid 'white))
-                           (+ (- GAME-WIDTH (* (- MAX-SCORE (sub1 (scr . score))) SCR-W)) (/ SCR-W 2))
-                           (cond [(string=? (scr . name) team1) (* 0.75 PPF)]
-                                 [(string=? (scr . name) team2) (* 3.75 PPF)]
-                                 [else (* 7 PPF)])
-                           bg))]
+              (place-image
+               (overlay (text (number->string (scr . end)) PPF 'black)
+                        (rectangle (* .9 PPF) (* .9 SCR-W) 'solid 'white))
+               (+ (- GAME-WIDTH (* (- MAX-SCORE (sub1 (scr . score))) SCR-W))
+                  (/ SCR-W 2))
+               (cond [(string=? (scr . name) team1) (* 0.75 PPF)]
+                     [(string=? (scr . name) team2) (* 3.75 PPF)]
+                     [else (* 7 PPF)])
+               bg))]
       (place-image (team-txt team1)
                    (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2) (* 0.75 PPF)
                    (place-image (team-txt team2)
-                                (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2) (* 3.75 PPF)
+                                (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2)
+                                (* 3.75 PPF)
                                 (foldr draw-score
                                        SCOREBOARD
                                        (this . scores))))))
@@ -252,20 +287,23 @@ BROOM-IMG
 ;;   Is the Stone in the house?
 
 
-;; Abstract super class for Stones
-;; A SuperStone is a (new super-stone% Posn Posn Number Number)
-;; Where pos is the Stone's position
+;; A SuperStone is a (new stone% String Posn Posn Number Number)
+;; Where team is the name of the team whose stone this is
+;;   and pos is the Stone's position
 ;;   and vel is the Stone's velocity
 ;;   and curl is the amount the stone is curling (degrees)
 ;;   and rotation is how far the stone is rotated from straight
-(define-class super-stone%
-  (fields pos vel curl rot)
+(define-class stone%
+  (fields team pos vel curl rot)
   
   ;; draw/color : Symbol Image -> Image
   ;; Draw an Image of the Stone with the given color
   (define (draw/color color scn)
-    (overlay (circle (* .65 STONE-R) 'solid color)
-             (circle STONE-R 'solid 'gray)))
+    (place-image (overlay (circle (* .65 STONE-R) 'solid color)
+                          (circle STONE-R 'solid 'gray))
+                 (this . pos . x)
+                 (this . pos . y)
+                 scn))
   
   ;; off-sheet? : -> Boolean
   ;; Is the stone off of the sheet?
@@ -285,8 +323,7 @@ BROOM-IMG
   ;; distance-to-button : -> Number
   ;; How far is the Stone from the center of the house?
   (define (distance-to-button)
-    ((new posn% ((+ THIS-TLINE-POS (this . pos . x)) (+ THIS-TLINE-POS (this . pos . y))))
-     . vel . total))
+    (this . distance (new posn% CNTR-POS D2B)))
   
   ;; hogged : -> Boolean
   ;; Did the stone stop before fully crossing the hog line?
@@ -301,22 +338,19 @@ BROOM-IMG
     (<= (this . distance-to-button) R-12FT))
   )
 
-;; Stone for team 1
-;; A Team1Stone is a (new team1-stone% Posn Posn Number Number)
-(define-class team1-stone%
-  (super super-stone%)
+;; A Stones is a (new stones% [Listof Stone])
+(define-class stones%
+  (fields stones)
   
-  ;; draw : Image -> Image
-  ;; Draw an Image of the Stone onto the given scene
-  )
-
-;; Stone for team 2
-;; A Team2Stone is a (new team2-stone% Posn Posn Number Number)
-(define-class team2-stone%
-  (super super-stone%)
-  
-  ;; draw : Image -> Image
-  ;; Draw an Image of the Stone onto the given scene
+  ;; draw-all : Image -> Image
+  ;; Draw all of the stones in the list onto the given scene
+  (define (draw-all scn)
+    (foldr (λ (stn base)
+             (place-image (stn . draw)
+                          (stn . pos . x) (stn . pos . y)
+                          base))
+           scn
+           (this . stones)))
   )
 
 #|---------------------------------------
@@ -334,7 +368,7 @@ BROOM-IMG
 ---------------------------------------|#
 
 ;; An abstract World for all worlds during an end
-;; An EndWorlds is a (new end-worlds% [Listof Score] [Listof Stone] [Listof Stone])]
+;; An EndWorlds is a (new end-worlds% [Listof Score] Stones Stones)]
 ;; Where scores is a list of who scored in each end
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end
@@ -343,37 +377,70 @@ BROOM-IMG
 
 ;; A World in which the player is throwing a Stone
 ;; A ThrowWorld is a
-;; (new throw-world% Scores [Listof Stone] [Listof Stone] Stone)
+;; (new throw-world% Scores Stones Stones Stone String)
 ;; Where scores is a list of who scored in each end
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end
 ;;   and throw-stone is the stone being thrown
+;;   and curl is the direction of the curl ("left" or "right")
 (define-class throw-world%
   (super end-worlds%)
-  (fields throw-stone)
+  (fields throw-stone goal-x curl)
   
   ;; to-draw : -> Image
   ;; Current stone in main area
   ;; Full sheet on side, complete with all stones
   ;; Scores
-  ;; Slider to set curl
+  ;; Indicator of curl direction
   
   ;; on-tick : -> World
   ;; Produce the next world state
   
   ;; on-mouse : MouseEvent Number Number -> World
-  ;; drag on bar to change curl; drag and release stone to throw
+  ;; Mouse x position is the target of the stone (at this t-line)
+  (define (on-mouse me x y)
+    (cond [(mouse=? me "button-down")
+           (new slide-world%
+                (this . scores)
+                (this . thrown-stones)
+                (this . unthrown-stones)
+                (new stone%
+                     (this . throw-stone . team)
+                     (this . throw-stone . pos)
+                     (this . throw-stone . to-from-vel
+                           (new posn% (this . goal-x) D2B)
+                           10)))] ;; Temporary constant speed
+          [else (new throw-world%
+                     (this . scores)
+                     (this . thrown-stones)
+                     (this . unthrown-stones)
+                     (this . throw-stone)
+                     x
+                     (this . curl))]))
   
+  ;; on-key : KeyEvent -> World
+  ;; Left and right arrows set curl of stone
+  (define (on-key ke)
+    (if (or (string=? ke "right")
+            (string=? ke "left"))
+        (new throw-world%
+             (this . scores)
+             (this . thrown-stones)
+             (this . unthrown-stones)
+             (this . throw-stone)
+             (this . goal-x)
+             ke)
+        this))
   )
 
 ;; A World in which player is directing thrown stone
 ;; A SlideWorld is a
-;; (new throw-world% Scores [Listof Stone] [Listof Stone] Stone)
+;; (new throw-world% Scores Stones Stones Stone)
 ;; Where scores is a list of who scored in each end
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end
 ;;   and slide-stone is the active sliding stone
-(define-class slide-stone%
+(define-class slide-world%
   (super end-worlds%)
   (fields slide-stone)
   
@@ -382,6 +449,21 @@ BROOM-IMG
   ;; Full sheet on side, complete with all stones
   ;; Scores
   ;; Indicator showing velocity
+  (define (to-draw)
+    (local [(define scaled-sheet
+              (this . thrown-stones . draw-all
+                    (scale SCALE SHEET-IMG)))
+            (define main-sheet
+              (this . unthrown-stones . draw-all 
+                    (this . slide-stone . draw 
+                          SHEET-IMG)))]
+      (place-image scaled-sheet
+                   (/ (image-width scaled-sheet) 2)
+                   (/ GAME-HEIGHT 2)
+                   (place-image main-sheet
+                                (+ (image-width scaled-sheet) (/ WIDTH 2))
+                                (/ GAME-HEIGHT 2)
+                                (empty-scene GAME-WIDTH GAME-HEIGHT)))))
   
   ;; on-tick : -> World
   ;; Produce the next world state (moving stone)
@@ -391,7 +473,7 @@ BROOM-IMG
   )
 
 ;; A world showing the house between throws
-;; A BetweenThrowWorld is a (new between-throw-world% Scores [ListofStone] [Listof Stone])
+;; A BetweenThrowWorld is a (new between-throw-world% Scores Stones Stones)
 ;; Where scores is a list of who scored in each end
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end

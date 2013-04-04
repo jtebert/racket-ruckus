@@ -53,7 +53,7 @@
 (define THIS-BACKLINE-POS (+ D2B (* -.5 HOUSE-D)))
 ;; This hack (-12')
 (define THIS-HACK-POS (+ D2B (* -12 PPF)))
-;; This hog line(21')
+;; This hog line (21')
 (define THIS-HOG-POS (+ D2B (* 21 PPF)))
 
 ;; That t-line (114')
@@ -423,7 +423,7 @@ BROOM-IMG
 ;;   Is the Stone in the house?
 
 
-;; A SuperStone is a (new stone% String Posn Posn Number Number)
+;; A SuperStone is a (new stone% String Posn Vector Number Number)
 ;; Where team is the name of the team whose stone this is
 ;;   and pos is the Stone's position
 ;;   and vel is the Stone's velocity
@@ -454,7 +454,7 @@ BROOM-IMG
   ;; stopped? : -> Boolean
   ;; Is the stone stopped? (Below a certain velocity threshold)
   (define (stopped?)
-    (< (this . vel . total) 0.5))
+    (< (this . vel . magnitude) 0.5))
   
   ;; distance-to-button : -> Number
   ;; How far is the Stone from the center of the house?

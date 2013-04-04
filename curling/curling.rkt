@@ -7,8 +7,13 @@
 
 ;; PHYSICS CONSTANTS
 
-;; Number of pixels per foot in real curling dimensions
-(define PPF 20)
+;; Number of pixels per meter in real curling dimensions
+(define PPM 60)
+;; Feet to meters conversion
+(define MPF .3048)
+;; Convert feet to pixels
+(define PPF (* PPM MPF))
+
 ;; Frictional force
 ;; Effect of sweep (reduce curl, increase velocity)
 
@@ -17,25 +22,35 @@
 ;; DIMENSIONS (in pixels)
 
 ;; Diameter of House (12')
-(define HOUSE-D (* 12 PPF))
+(define HOUSE-D (* 12 MPF))
+(define HOUSE-D-p (* HOUSE-D PPM))
 ;; Radius of 12' (6')
 (define R-12FT (/ HOUSE-D 2))
+(define R-12FT-p (* R-12FT PPM))
 ;; Radius of 8' (4')
-(define R-8FT (* 4 PPF))
+(define R-8FT (* 4 MPF))
+(define R-8FT-p (* R-8FT PPM))
 ;; Radius of 4' (2')
-(define R-4FT (* 2 PPF))
+(define R-4FT (* 2 MPF))
+(define R-4FT-p (* R-4FT PPM))
 ;; Radius of 1' (6")
-(define R-1FT (* .5 PPF))
+(define R-1FT (* .5 MPF))
+(define R-1FT-p (* R-1FT PPM))
 ;; Width of sheet (14'2")
-(define WIDTH (* (+ 14 2/12) PPF))
+(define WIDTH (* (+ 14 2/12) MPF))
+(define WIDTH-p (* WIDTH PPM))
 ;; Length of sheet (146')
-(define LENGTH (* 146 PPF))
+(define LENGTH (* 146 MPF))
+(define LENGTH-p (* LENGTH PPM))
 ;; Distance between hog lines
-(define MIDDLE-L (* 72 PPF))
+(define MIDDLE-L (* 72 MPF))
+(define MIDDLE-L-p (* MIDDLE-L PPM))
 ;; Distance from t to end of sheet
-(define D2B (* 16 PPF))
+(define D2B (* 16 MPF))
+(define D2B-p (* D2B PPM))
 ;; Radius of stone
-(define STONE-R (* .5 PPF))
+(define STONE-R (* .5 MPF))
+(define STONE-R-p (* STONE-R PPM))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -46,24 +61,33 @@
 
 ;; Center line position (x-coordinate)
 (define CNTR-POS (/ WIDTH 2))
+(define CNTR-POS-p (* CNTR-POS PPM))
 
 ;; This t-line (0')
 (define THIS-TLINE-POS D2B)
+(define THIS-TLINE-POS-p D2B-p)
 ;; This back-line (-6')
 (define THIS-BACKLINE-POS (+ D2B (* -.5 HOUSE-D)))
+(define THIS-BACKLINE-POS-p (* THIS-BACKLINE-POS PPM))
 ;; This hack (-12')
-(define THIS-HACK-POS (+ D2B (* -12 PPF)))
-;; This hog line(21')
-(define THIS-HOG-POS (+ D2B (* 21 PPF)))
+(define THIS-HACK-POS (+ D2B (* -12 MPF)))
+(define THIS-HACK-POS-p (* THIS-HACK-POS PPM))
+;; This hog line (21')
+(define THIS-HOG-POS (+ D2B (* 21 MPF)))
+(define THIS-HOG-POS-p (* THIS-HOG-POS PPM))
 
 ;; That t-line (114')
-(define THAT-TLINE-POS (+ D2B (* 114 PPF)))
+(define THAT-TLINE-POS (+ D2B (* 114 MPF)))
+(define THAT-TLINE-POS-p (* THAT-TLINE-POS PPM))
 ;; That back-line (120')
-(define THAT-BACKLINE-POS (+ D2B (* 120 PPF)))
+(define THAT-BACKLINE-POS (+ D2B (* 120 MPF)))
+(define THAT-BACKLINE-POS-p (* THAT-BACKLINE-POS PPM))
 ;; That hack (126')
-(define THAT-HACK-POS (+ D2B (* 126 PPF)))
+(define THAT-HACK-POS (+ D2B (* 126 MPF)))
+(define THAT-HACK-POS-p (* THAT-HACK-POS PPM))
 ;; That hog line(93')
-(define THAT-HOG-POS (+ D2B (* 93 PPF)))
+(define THAT-HOG-POS (+ D2B (* 93 MPF)))
+(define THAT-HOG-POS-p (* THAT-HOG-POS PPM))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -78,7 +102,8 @@
 ;; Maximum score on scoreboard
 (define MAX-SCORE 12)
 ;; Width of a space on the scoreboard
-(define SCR-W (* PPF 1.25))
+(define SCR-W (* MPF 1.25))
+(define SCR-W-p (* SCR-W PPM))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -86,12 +111,10 @@
 
 ;; The House (target)
 (define HOUSE-IMG
-  (overlay (circle R-1FT 'solid 'white)
-           (overlay (circle R-4FT 'solid 'red)
-                    (overlay (circle R-8FT 'solid 'white)
-                             (circle R-12FT 'solid 'blue)))))
-
-
+  (overlay (circle R-1FT-p 'solid 'white)
+           (overlay (circle R-4FT-p 'solid 'red)
+                    (overlay (circle R-8FT-p 'solid 'white)
+                             (circle R-12FT-p 'solid 'blue)))))
 
 ;; Sheet - entire playing surface/in-bounds area
 (define SHEET-IMG
@@ -103,42 +126,45 @@
        (add-line
         (add-line
          (place-image HOUSE-IMG
-                      CNTR-POS THIS-TLINE-POS
+                      CNTR-POS-p THIS-TLINE-POS-p
                       (place-image HOUSE-IMG
-                                   CNTR-POS THAT-TLINE-POS
-                                   (rectangle WIDTH LENGTH 'solid 'white)))
-         0 THAT-BACKLINE-POS WIDTH THAT-BACKLINE-POS 'black)
-        0 THAT-HOG-POS WIDTH THAT-HOG-POS 'black)
-       0 THAT-TLINE-POS WIDTH THAT-TLINE-POS 'black)
-      0 THIS-BACKLINE-POS WIDTH THIS-BACKLINE-POS 'black)
-     0 THIS-HOG-POS WIDTH THIS-HOG-POS 'black)
-    0 THIS-TLINE-POS WIDTH THIS-TLINE-POS 'black)
-   CNTR-POS 0 CNTR-POS LENGTH 'black))
+                                   CNTR-POS-p THAT-TLINE-POS-p
+                                   (rectangle WIDTH-p LENGTH-p 'solid 'white)))
+         0 THAT-BACKLINE-POS-p WIDTH-p THAT-BACKLINE-POS-p 'black)
+        0 THAT-HOG-POS-p WIDTH-p THAT-HOG-POS-p 'black)
+       0 THAT-TLINE-POS-p WIDTH-p THAT-TLINE-POS-p 'black)
+      0 THIS-BACKLINE-POS-p WIDTH-p THIS-BACKLINE-POS-p 'black)
+     0 THIS-HOG-POS-p WIDTH-p THIS-HOG-POS-p 'black)
+    0 THIS-TLINE-POS-p WIDTH-p THIS-TLINE-POS-p 'black)
+   CNTR-POS-p 0 CNTR-POS-p LENGTH-p 'black))
 SHEET-IMG
 
 ;; Height of game window
 (define GAME-HEIGHT (* 2 WIDTH))
+(define GAME-HEIGHT-p (* GAME-HEIGHT PPM))
 ;; Scaling factor for small sheet
 (define SCALE (/ GAME-HEIGHT LENGTH))
 ;; Width of game window
 (define GAME-WIDTH
   (+ WIDTH (* WIDTH SCALE)))
+(define GAME-WIDTH-p (* GAME-WIDTH PPM))
 
 ;; Scoreboard
+;; Board makes the background of red, white, and blue
 (define BOARD
-  (place-image (rectangle GAME-WIDTH (* 1.5 PPF) 'solid 'blue)
-               (* .5 GAME-WIDTH) (* 0.75 PPF)
-               (place-image (rectangle GAME-WIDTH (* 1.5 PPF) 'solid 'red)
-                            (* .5 GAME-WIDTH) (* 3.75 PPF)
-                            (rectangle GAME-WIDTH (* 4.5 PPF) 'solid 'white))))
+  (place-image (rectangle GAME-WIDTH-p (* 1.5 PPF) 'solid 'blue)
+               (* .5 GAME-WIDTH-p) (* 0.75 PPF)
+               (place-image (rectangle GAME-WIDTH-p (* 1.5 PPF) 'solid 'red)
+                            (* .5 GAME-WIDTH-p) (* 3.75 PPF)
+                            (rectangle GAME-WIDTH-p (* 4.5 PPF) 'solid 'white))))
 
 (define SCOREBOARD
-  (local [(define (add-num-line n base)
-            (local [(define x (- GAME-WIDTH (* n SCR-W)))]
+  (local [(define (add-num-line n base) ;; add lines to the background
+            (local [(define x (- GAME-WIDTH-p (* n SCR-W-p)))]
               (add-line
                (place-image (text (number->string (- MAX-SCORE (sub1 n)))
-                                  PPF 'black)
-                            (+ x (/ SCR-W 2)) (* 2.25 PPF)
+                                  (round PPF) 'black)
+                            (+ x (/ SCR-W-p 2)) (* 2.25 PPF)
                             base)
                x 0 x (* 4.5 PPF) 'black)))]
     (foldr add-num-line
@@ -146,11 +172,8 @@ SHEET-IMG
            (build-list MAX-SCORE
                        (λ (n) (add1 n))))))
 
-;; Team 1 stone
-;; Team 2 stone
 ;; Broom head (for sweeping)
 (define BROOM-IMG (ellipse (* 1.5 PPF) (* .5 PPF) 'solid 'red))
-BROOM-IMG
 
 #|---------------------------------------
             ACCESSORY CLASSES
@@ -376,23 +399,23 @@ BROOM-IMG
                               name-width)
                            base
                            (text team n 'white)))
-                     (text team PPF 'white)
-                     (build-list PPF (λ (x) (add1 x)))))
+                     (text team MPF 'white)
+                     (build-list MPF (λ (x) (add1 x)))))
             (define (draw-score scr bg)
               (place-image
-               (overlay (text (number->string (scr . end)) PPF 'black)
-                        (rectangle (* .9 PPF) (* .9 SCR-W) 'solid 'white))
+               (overlay (text (number->string (scr . end)) MPF 'black)
+                        (rectangle (* .9 MPF) (* .9 SCR-W) 'solid 'white))
                (+ (- GAME-WIDTH (* (- MAX-SCORE (sub1 (scr . score))) SCR-W))
                   (/ SCR-W 2))
-               (cond [(string=? (scr . name) team1) (* 0.75 PPF)]
-                     [(string=? (scr . name) team2) (* 3.75 PPF)]
-                     [else (* 7 PPF)])
+               (cond [(string=? (scr . name) team1) (* 0.75 MPF)]
+                     [(string=? (scr . name) team2) (* 3.75 MPF)]
+                     [else (* 7 MPF)])
                bg))]
       (place-image (team-txt team1)
-                   (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2) (* 0.75 PPF)
+                   (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2) (* 0.75 MPF)
                    (place-image (team-txt team2)
                                 (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2)
-                                (* 3.75 PPF)
+                                (* 3.75 MPF)
                                 (foldr draw-score
                                        SCOREBOARD
                                        (this . scores))))))

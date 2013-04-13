@@ -12,7 +12,7 @@
 ;; PHYSICS CONSTANTS
 
 ;; Number of pixels per meter in real curling dimensions
-(define PPM 60)
+(define PPM 100)
 ;; Feet to meters conversion
 (define MPF .3048)
 ;; Convert feet to pixels
@@ -130,6 +130,29 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+;; FOR DRAWING FINAL OUTPUT
+;; All sizes in pixels
+
+;; Scoreboard height
+(define SCR-HT-p (* 4.5 PPF))
+;; Scoreboard width
+(define SCR-WIDTH-p (* 1.5 WIDTH-p))
+;; Height of visible area of sheet (back line to hog line)
+(define VIEW-HT-p (+ THIS-HOG-POS-p THIS-TLINE-POS-p (* 3 STONE-R-p)))
+;; Height of game window
+(define GAME-HT-p (+ SCR-HT-p VIEW-HT-p))
+;; Scaling factor for small sheet
+(define SCALE (/ GAME-HT-p LENGTH-p))
+;; Width of small sheet
+(define SM-WIDTH-p (* SCALE WIDTH-p))
+;; Width of game window
+(define GAME-WIDTH-p (+ (* 2 WIDTH-p) SM-WIDTH-p))
+
+;; Background on which to place all the other stuff
+(define BG (empty-scene GAME-WIDTH-p GAME-HT-p))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 ;; IMAGES
 
 ;; The House (target)
@@ -161,42 +184,32 @@
     0 THIS-TLINE-POS-p WIDTH-p THIS-TLINE-POS-p 'black)
    CNTR-POS-p 0 CNTR-POS-p LENGTH-p 'black))
 
-;; Height of game window
-(define GAME-HEIGHT (* 2 WIDTH))
-(define GAME-HEIGHT-p (* GAME-HEIGHT PPM))
-;; Scaling factor for small sheet
-(define SCALE (/ GAME-HEIGHT LENGTH))
-;; Width of game window
-(define GAME-WIDTH
-  (+ WIDTH (* WIDTH SCALE)))
-(define GAME-WIDTH-p (* GAME-WIDTH PPM))
-
-;; Scoreboard
-;; Board makes the background of red, white, and blue (helper)
-(define BOARD
-  (place-image (rectangle GAME-WIDTH-p (* 1.5 PPF) 'solid 'blue)
-               (* .5 GAME-WIDTH-p) (* 0.75 PPF)
-               (place-image (rectangle GAME-WIDTH-p (* 1.5 PPF) 'solid 'red)
-                            (* .5 GAME-WIDTH-p) (* 3.75 PPF)
-                            (rectangle GAME-WIDTH-p (* 4.5 PPF) 'solid 'white))))
-
 ;; Scoreboard is the board with lines and numbers
 (define SCOREBOARD
-  (local [(define (add-num-line n base) ;; add lines to the background
-            (local [(define x (- GAME-WIDTH-p (* n SCR-W-p)))]
-              (add-line
-               (place-image (text (number->string (- MAX-SCORE (sub1 n)))
-                                  (round PPF) 'black)
-                            (+ x (/ SCR-W-p 2)) (* 2.25 PPF)
-                            base)
-               x 0 x (* 4.5 PPF) 'black)))]
+  (local
+    [(define BOARD
+       (overlay/xy (rectangle SCR-WIDTH-p (/ SCR-HT-p 3) 'solid 'blue)
+                   0 0
+                   (overlay/xy (rectangle SCR-WIDTH-p (/ SCR-HT-p 3) 'solid 'red)
+                               0 (* -2/3 SCR-HT-p)
+                               (rectangle SCR-WIDTH-p SCR-HT-p 'solid 'white))))
+     (define (add-num-line n base) ;; add lines to the background
+       (local [(define x (- SCR-WIDTH-p (* n SCR-W-p)))]
+         (add-line
+          (place-image (text (number->string (- MAX-SCORE (sub1 n)))
+                             (round PPF) 'black)
+                       (+ x (/ SCR-W-p 2)) (/ SCR-HT-p 2)
+                       base)
+          x 0 x SCR-HT-p 'black)))]
     (foldr add-num-line
            BOARD
            (build-list MAX-SCORE
                        (λ (n) (add1 n))))))
 
 ;; Broom head (for sweeping)
-(define BROOM-IMG (ellipse (* 1.5 PPF) (* .5 PPF) 'solid 'red))
+(define BROOM-IMG (ellipse (/ SCR-HT-p 3) (* .5 PPF) 'solid 'red))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 #|---------------------------------------
             ACCESSORY CLASSES
@@ -289,7 +302,7 @@
   ;; Scale velocity vector by a scalar number
   (define (scale num)
     (new vector% (* (this . x) num)
-               (* (this . y) num)))
+         (* (this . y) num)))
   (check-expect (vec0 . scale 10) vec0)
   (check-expect (vec1 . scale 0) vec0)
   (check-expect (vec1 . scale -1)
@@ -370,10 +383,10 @@
   ;; norm is the normal vector between the 2 objects
   (define (col-vel/norm norm that m1 m2)
     ((norm . unit . scale
-          (this . col-comp-normal norm that m1 m2))
+           (this . col-comp-normal norm that m1 m2))
      . add
      (norm . normal . unit . scale
-            (this . comp-tangent norm))))
+           (this . comp-tangent norm))))
   (check-expect (vec0 . col-vel/norm vec1 vec1 10 10)
                 (new vector% 3 4))
   (check-expect (vec2 . col-vel/norm vec1 vec0 5 10)
@@ -449,42 +462,50 @@
   (define (winner team1 team2)
     (cond [(> (this . total-score team1)
               (this . total-score team2)) team1]
-        [else team2]))
+          [else team2]))
   (check-expect (scores1 . winner "A" "B") "A")
   (check-expect (scores2 . winner "A" "B") "B")
   (check-expect (scores1 . winner "C" "B") "B")
   
-  ;; draw-scores : String String -> Image
+  ;; draw : String String -> Image
   ;; Draw the scores onto the scoreboard (team1 on top, team2 on bottom)
-  (define (draw-scores team1 team2)
-    (local [(define name-width (* 0.9 (- GAME-WIDTH (* MAX-SCORE SCR-W))))
+  (define (draw team1 team2)
+    (local [(define name-width (* 0.9 (- SCR-WIDTH-p (* MAX-SCORE SCR-W))))
+            ;; Create image of team name, no wider than name-width
             (define (team-txt team)
-              ;; Create image of team name, no wider than name-width
               (foldr (λ (n base)
                        (if (< (image-width (text team n 'white))
                               name-width)
                            base
                            (text team n 'white)))
-                     (text team MPF 'white)
-                     (build-list MPF (λ (x) (add1 x)))))
-            (define (draw-score scr bg)
-              (place-image
-               (overlay (text (number->string (scr . end)) MPF 'black)
-                        (rectangle (* .9 MPF) (* .9 SCR-W) 'solid 'white))
-               (+ (- GAME-WIDTH (* (- MAX-SCORE (sub1 (scr . score))) SCR-W))
-                  (/ SCR-W 2))
-               (cond [(string=? (scr . name) team1) (* 0.75 MPF)]
-                     [(string=? (scr . name) team2) (* 3.75 MPF)]
-                     [else (* 7 MPF)])
-               bg))]
+                     (text team (round PPF) 'white)
+                     (build-list (round PPF) (λ (x) (add1 x)))))
+            ;; draw scores onto the base image
+            (define (draw-scores scrs bg t1-scr t2-scr)
+              (cond [(empty? scrs) bg]
+                    [else (place-image
+                            (overlay (text (number->string ((first scrs) . end)) (round PPF) 'black)
+                                     (rectangle (* .9 PPF) (* .9 SCR-W-p) 'solid 'white))
+                            (+ (- SCR-WIDTH-p
+                                  (* (- MAX-SCORE
+                                        (+ (if (string=? ((first scrs) . name) team1) t1-scr t2-scr)
+                                           (sub1 ((first scrs) . score))))
+                                     SCR-W-p))
+                               (/ SCR-W-p 2))
+                           (cond [(string=? ((first scrs) . name) team1) (* 1/6 SCR-HT-p)]
+                                 [(string=? ((first scrs) . name) team2) (* 5/6 SCR-HT-p)]
+                                 [else (* 7/6 SCR-HT-p)])
+                           (draw-scores (rest scrs) bg
+                                        (if (string=? ((first scrs) . name) team1)
+                                            (+ ((first scrs) . score) t1-scr) t1-scr)
+                                        (if (string=? ((first scrs) . name) team2)
+                                            (+ ((first scrs) . score) t2-scr) t2-scr)))]))]
       (place-image (team-txt team1)
-                   (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2) (* 0.75 MPF)
+                   (/ (- SCR-WIDTH-p (* SCR-W-p MAX-SCORE)) 2) (* 1/6 SCR-HT-p)
                    (place-image (team-txt team2)
-                                (/ (- GAME-WIDTH (* SCR-W MAX-SCORE)) 2)
-                                (* 3.75 MPF)
-                                (foldr draw-score
-                                       SCOREBOARD
-                                       (this . scores)))))))
+                                (/ (- SCR-WIDTH-p (* SCR-W-p MAX-SCORE)) 2)
+                                (* 5/6 SCR-HT-p)
+                                (draw-scores (this . scores) SCOREBOARD 0 0))))))
 
 ;; Examples:
 (define scores1 (new scores%
@@ -523,13 +544,20 @@
 (define-class stone%
   (fields team pos vel curl rot)
   
-  ;; draw/color : Symbol Image -> Image
+  ;; draw/color : String Image -> Image
   ;; Draw an Image of the Stone with the given color
   ;; at the correct location and rotation
   (define (draw/color color scn)
     (place-image (rotate (this . curl)
-                         (overlay (circle (* .65 STONE-R-p) 'solid color)
-                                  (circle STONE-R-p 'solid 'gray)))
+                         (overlay/offset
+                          (overlay/align/offset
+                           "middle" "top"
+                           (ellipse (* .4 STONE-R-p) (* .4 STONE-R-p) 'solid color)
+                           0 (* .1 STONE-R-p)
+                           (ellipse (* .3 STONE-R-p) STONE-R-p 'outline 'black))
+                          0 (* .1 STONE-R-p)
+                          (overlay (circle (* .65 STONE-R-p) 'solid color)
+                                   (circle STONE-R-p 'solid 'gray))))
                  (* (this . pos . x) PPM)
                  (* (this . pos . y) PPM)
                  scn))
@@ -537,6 +565,7 @@
   ;; off-sheet? : -> Boolean
   ;; Is the stone off of the sheet?
   ;; Completely part the back line OR touching one of the sides
+  ;;> Might need corection for back end of sheet
   (define (off-sheet?)
     (or (> (+ (this . pos . x) STONE-R) WIDTH)
         (< (- (this . pos . x) STONE-R) 0)
@@ -563,8 +592,8 @@
              (+ (this . pos . y) (this . vel . y))
              (this . curl)
              (this . vel . acc ACC-FRIC))))
-    ;;> Needs change due to curl
-    
+  ;;> Needs change due to curl
+  
   ;; stopped? : -> Boolean
   ;; Is the stone stopped? (Below a certain velocity threshold)
   (define (stopped?)
@@ -769,7 +798,10 @@
                 END WORLDS
 ---------------------------------------|#
 
-;; An abstract World for all worlds during an end
+;; An abstract World for all worlds during an end:
+;; - ThrowWorld (throwing stone)
+;; - SlideWorld (while stone is sliding)
+;; - Between ThrowWorld (after all stones have stopped, before throwing again)
 ;; An EndWorlds is a (new end-worlds% [Listof Score] Stones Stones)]
 ;; Where scores is a list of who scored in each end
 ;;   and thrown-stones is a list of the stones in play at the other end
@@ -833,7 +865,10 @@
              (this . goal-x)
              ke)
         this))
-  )
+  
+  ;; on-tick : -> World
+  ;; Nothing happens when the world ticks
+  (define (on-tick) this))
 
 ;; A World in which player is directing thrown stone
 ;; A SlideWorld is a
@@ -847,25 +882,28 @@
   (fields slide-stone)
   
   ;; to-draw : -> Image
-  ;; Current stone centered in window
-  ;; Full sheet on side, complete with all stones
-  ;; Scores
-  ;; Indicator showing velocity
-  (define (to-draw)
-    (local [(define scaled-sheet
+  ;; Current stone centered left window
+  ;; Scoreboard at the bottom
+  ;; House on the left
+  ;; Overview of sheet on far left
+  ;;> Need velocity indicator, curl indicator/buttons
+  #;(define (to-draw)
+    (local [(define sheet/stones
               (this . thrown-stones . draw-all
-                    (scale SCALE SHEET-IMG)))
-            (define main-sheet
-              (this . unthrown-stones . draw-all 
-                    (this . slide-stone . draw 
-                          SHEET-IMG)))]
-      (place-image scaled-sheet
-                   (/ (image-width scaled-sheet) 2)
-                   (/ GAME-HEIGHT 2)
-                   (place-image main-sheet
-                                (+ (image-width scaled-sheet) (/ WIDTH 2))
-                                (/ GAME-HEIGHT 2)
-                                (empty-scene GAME-WIDTH GAME-HEIGHT)))))
+                    (this . unthrown-stones . draw-all
+                          (this . slide-stone . draw SHEET-IMG))))
+            (define scaled-sheet (scale SCALE sheet/stones))
+            (define target-sheet
+              (crop 0 (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
+                    WIDTH-p VIEW-HT-p
+                    sheet/stones))
+            (define view-sheet
+              (crop 0 (max (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
+                           (this . slide-stone . pos . y))
+                    WIDTH-p VIEW-HT-p
+                    sheet/stones))
+            (define scores-img
+              (this . scores . ))]))
   
   ;; on-tick : -> World
   ;; Produce the next world state (moving stone)

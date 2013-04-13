@@ -36,10 +36,6 @@
 ;; Acceleration (deceleration) due to friction (m/s^2)
 ;; a = F/m
 (define ACC-FRIC (/ F-FRIC STONE-MASS))
-#|
-;; Deceleration per tick (m/tick^2)
-(define TICK-ACC (* ACC-FRIC (sqr TICK-RATE)))
-|#
 ;; Effect of sweep (reduce curl, increase velocity)
 ;; _________
 
@@ -247,6 +243,9 @@
 (define p0 (new posn% 0 0))
 (define p1 (new posn% 10 10))
 (define p2 (new posn% 3 4))
+
+;; This button (center of house) (0,0)
+(define THIS-BUTTON-POS (new posn% CNTR-POS D2B))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -515,7 +514,7 @@
 ;;   Is the Stone in the house?
 
 
-;; A SuperStone is a (new stone% String Posn Vector Number Number)
+;; A Stone is a (new stone% String Posn Vector Number Number)
 ;; Where team is the name of the team whose stone this is
 ;;   and pos is the Stone's position
 ;;   and vel is the Stone's velocity
@@ -526,67 +525,116 @@
   
   ;; draw/color : Symbol Image -> Image
   ;; Draw an Image of the Stone with the given color
+  ;; at the correct location and rotation
   (define (draw/color color scn)
-    (place-image (overlay (circle (* .65 STONE-R) 'solid color)
-                          (circle STONE-R 'solid 'gray))
-                 (this . pos . x)
-                 (this . pos . y)
+    (place-image (rotate (this . curl)
+                         (overlay (circle (* .65 STONE-R-p) 'solid color)
+                                  (circle STONE-R-p 'solid 'gray)))
+                 (* (this . pos . x) PPM)
+                 (* (this . pos . y) PPM)
                  scn))
   
   ;; off-sheet? : -> Boolean
   ;; Is the stone off of the sheet?
+  ;; Completely part the back line OR touching one of the sides
   (define (off-sheet?)
-    (or (> (- (this . pos . x) STONE-R) WIDTH)
-        (< (+ (this . pos . x) STONE-R) 0)
+    (or (> (+ (this . pos . x) STONE-R) WIDTH)
+        (< (- (this . pos . x) STONE-R) 0)
         (< (+ (this . pos . y) STONE-R) THIS-BACKLINE-POS)))
+  (check-expect (stone0 . off-sheet?) true)
+  (check-expect (stone1 . off-sheet?) false)
+  (check-expect (stone5 . off-sheet?) true)
+  (check-expect (stone4 . off-sheet?) true)
+  (check-expect (stone3 . off-sheet?) false)
   
   ;; move : -> Stone
   ;; Move the stone according to its velocity and curl
+  ;; Set velocity to 0 if stone is below stop threshold
   (define (move)
-    (new stone%
-         (this . team)
-         (+ (this . pos . x) (this . vel . x))
-         (+ (this . pos . y) (this . vel . y))
-         (this . curl)
-         (this . vel . acc ACC-FRIC)))
-  ;;______ Needs change due to curl
-  
+    (if (this . stopped?)
+        (new stone%
+             (this . team)
+             (this . pos . x) (this . pos . y)
+             (this . curl)
+             (new vector% 0 0))
+        (new stone%
+             (this . team)
+             (+ (this . pos . x) (this . vel . x))
+             (+ (this . pos . y) (this . vel . y))
+             (this . curl)
+             (this . vel . acc ACC-FRIC))))
+    ;;> Needs change due to curl
+    
   ;; stopped? : -> Boolean
   ;; Is the stone stopped? (Below a certain velocity threshold)
   (define (stopped?)
-    (< (this . vel . magnitude) STOP-THRESH))
+    (< (abs (this . vel . magnitude)) STOP-THRESH))
+  (check-expect (stone0 . stopped?) true)
+  (check-expect (stone1 . stopped?) false)
+  (check-expect (stone2 . stopped?) true)
   
   ;; distance-to-button : -> Number
   ;; How far is the Stone from the center of the house?
   (define (distance-to-button)
-    (this . distance (new posn% CNTR-POS D2B)))
+    (this . pos . distance THIS-BUTTON-POS))
+  (check-within (stone0 . distance-to-button)
+                (sqrt (+ (sqr (THIS-BUTTON-POS . x))
+                         (sqr (THIS-BUTTON-POS . y))))
+                0.01)
+  (check-within (stone1 . distance-to-button)
+                (sqrt (+ (sqr (- (THIS-BUTTON-POS . x) (stone1 . pos . x)))
+                         (sqr (- (THIS-BUTTON-POS . y) (stone1 . pos . y)))))
+                0.01)
   
-  ;; hogged : -> Boolean
+  ;; hogged? : -> Boolean
   ;; Did the stone stop before fully crossing the hog line?
   (define (hogged?)
     (and (this . stopped?)
          (> (+ (this . pos . y) STONE-R)
-            THIS-TLINE-POS)))
+            THIS-HOG-POS)))
+  (check-expect (stone1 . hogged?) false)
+  (check-expect (stone2 . hogged?) false)
+  (check-expect (stone3 . hogged?) false)
+  (check-expect (stone4 . hogged?) true)
   
   ;; in-house? : -> Boolean
   ;; Is the Stone in the house?
+  ;; Any part of the stone tourching the house is in the house
   (define (in-house?)
-    (<= (this . distance-to-button) R-12FT))
-  )
+    (<= (this . distance-to-button) (+ STONE-R R-12FT)))
+  (check-expect (stone0 . in-house?) false)
+  (check-expect (stone1 . in-house?) true)
+  (check-expect (stone3 . in-house?) false))
+
+;; Examples
+(define stone0 (new stone% "A" (new posn% 0 0) vec0 0 0))
+(define stone1 (new stone% "B" (new posn% 2 5) vec1 45 45))
+(define stone2 (new stone% "B" (new posn% 2 5) (new vector% 0.01 0.01) 45 45))
+(define stone3 (new stone% "A" (new posn% 3 15) (new vector% -1 -1) 10 100))
+(define stone4 (new stone% "A" (new posn% .1 15) (new vector% 0 0) 10 100))
+(define stone5 (new stone% "B" (new posn% 4.25 5) (new vector% 0 0) 10 100))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; A Stones is a (new stones% [Listof Stone])
 (define-class stones%
   (fields stones)
   
-  ;; draw-all : Image -> Image
+  ;; draw-all : String Image -> Image
   ;; Draw all of the stones in the list onto the given scene
-  (define (draw-all scn)
+  ;; The stones of the given team are red; other team is blue
+  (define (draw-all team scn)
     (foldr (λ (stn base)
-             (place-image (stn . draw)
-                          (stn . pos . x) (stn . pos . y)
-                          base))
+             (if (string=? team (stn . team))
+                 (stn . draw/color 'red base)
+                 (stn . draw/color 'blue base)))
            scn
            (this . stones)))
+  
+  ;; move-all : -> Stones
+  ;; Move all of the stones in the set
+  (define (move-all)
+    (new stones% (map (λ (s )(s . move)) (this . stones))))
   
   ;; sitting : -> [or String false]
   ;; Return the name of the team with Stone closest to the button
@@ -594,7 +642,48 @@
   (define (sitting)
     (local [(define clst (this . closest))]
       (cond [(boolean? clst) clst]
-            [else (clst . name)])))
+            [else (clst . team)])))
+  (check-expect (stones0 . sitting) false)
+  (check-expect (stones3 . sitting) false)
+  (check-expect (stones1 . sitting) "B")
+  (check-expect (stones2 . sitting) "B")
+  
+  ;; in-house/team : String -> Stones
+  ;; Return the stones of a given team that are in the house
+  (define (in-house/team team)
+    (new stones% (filter (λ (s) (and (s . in-house?)
+                                     (string=? team (s . team))))
+                         (this . stones))))
+  (check-expect (stones0 . in-house/team "A") stones0)
+  (check-expect (stones0 . in-house/team "B") stones0)
+  (check-expect (stones1 . in-house/team "B")
+                (new stones% (list stone1 stone2)))
+  (check-expect (stones1 . in-house/team "A") stones0)
+  (check-expect (stones2 . in-house/team "A")
+                (new stones% (list (new stone% "A" (new posn% 3 6) vec0 0 0))))
+  (check-expect (stones2 . in-house/team "B")
+                (new stones% (list (new stone% "B" (new posn% 2 5) vec0 0 0)
+                                   (new stone% "B" (new posn% 3 5) vec0 0 0)
+                                   (new stone% "B" (new posn% 2 3.5) vec0 0 0))))
+  
+  ;; in-house/other-team : String -> Stones
+  ;; Return the stones of the OTHER team that are in the house
+  ;; aka the stones where the team is not the given team
+  (define (in-house/other-team team)
+    (new stones% (filter (λ (s) (and (s . in-house?)
+                                     (not (string=? team (s . team)))))
+                         (this . stones))))
+  (check-expect (stones0 . in-house/other-team "A") stones0)
+  (check-expect (stones0 . in-house/other-team "B") stones0)
+  (check-expect (stones1 . in-house/other-team "A")
+                (new stones% (list stone1 stone2)))
+  (check-expect (stones1 . in-house/other-team "B") stones0)
+  (check-expect (stones2 . in-house/other-team "B")
+                (new stones% (list (new stone% "A" (new posn% 3 6) vec0 0 0))))
+  (check-expect (stones2 . in-house/other-team "A")
+                (new stones% (list (new stone% "B" (new posn% 2 5) vec0 0 0)
+                                   (new stone% "B" (new posn% 3 5) vec0 0 0)
+                                   (new stone% "B" (new posn% 2 3.5) vec0 0 0))))
   
   ;; closest : -> [or false Stone]
   ;; Find the closest stone to the center of the house
@@ -608,20 +697,63 @@
                      s]
                     [else base]))]
       (foldr get-closer false (this . stones))))
+  (check-expect (stones0 . closest) false)
+  (check-expect (stones3 . closest) false)
+  (check-expect (stones2 . closest) (new stone% "B" (new posn% 2 5) vec0 0 0))
+  (check-expect (stones1 . closest) stone2)
   
-  ;; closest/team : String -> Stone
-  ;; Return the Stone closest to the center of the house for the given team
-  
+  ;; closest/other-team : String -> [or false Stone]
+  ;; Return the Stone closest to the center of the house for the OTHER team
+  ;; aka stone of NOT the given team
+  ;; return false if none are in the house
+  (define (closest/other-team team)
+    (this . in-house/other-team team . closest))
+  (check-expect (stones0 . closest/other-team "A") false)
+  (check-expect (stones0 . closest/other-team "B") false)
+  (check-expect (stones1 . closest/other-team "A") stone2)
+  (check-expect (stones1 . closest/other-team "B") false)
+  (check-expect (stones2 . closest/other-team "B")
+                (new stone% "A" (new posn% 3 6) vec0 0 0))
+  (check-expect (stones2 . closest/other-team "A")
+                (new stone% "B" (new posn% 2 5) vec0 0 0))
+  (check-expect (stones3 . closest/other-team "A") false)
+  (check-expect (stones3 . closest/other-team "B") false)
   
   ;; total-sitting : -> Number
   ;; Return the the total number of points for the team that is sitting
   ;; How many stones they have closer to the button than any of their
   ;; opponent's stones
-  #;(define (total-sitting)
-    (local [(define s-team (this . stones . sitting))
-            (define closest-opp)]
-      ()))
-  )
+  (define (total-sitting)
+    (local [;; name of the team that's sitting (or false if no stones in house)
+            (define s-team (this . sitting))
+            ;; stones of the team that's sitting (that are in the house)
+            (define s-stones (this . in-house/team s-team))
+            ;; closest stone of the team that's not sitting (or false)
+            (define closest-opp (this . closest/other-team s-team))
+            (define (if-closer s base)
+              (cond [(or (boolean? closest-opp)
+                         (< (s . distance-to-button)
+                            (closest-opp . distance-to-button)))
+                     (add1 base)]
+                    [else base]))]
+      (foldr if-closer 0 (s-stones . stones))))
+  (check-expect (stones0 . total-sitting) 0)
+  (check-expect (stones1 . total-sitting) 2)
+  (check-expect (stones2 . total-sitting) 3)
+  (check-expect (stones3 . total-sitting) 0))
+
+;; Examples
+(define stones0 (new stones% empty))
+(define stones1 (new stones%
+                     (list stone1 stone2 stone3 stone4 stone5)))
+(define stones2 (new stones%
+                     (list (new stone% "B" (new posn% 2 5) vec0 0 0)
+                           (new stone% "A" (new posn% 3 6) vec0 0 0)
+                           (new stone% "B" (new posn% 3 5) vec0 0 0)
+                           (new stone% "B" (new posn% 2 3.5) vec0 0 0)
+                           (new stone% "B" (new posn% 5 6) vec0 0 0)
+                           (new stone% "B" (new posn% 5 7) vec0 0 0))))
+(define stones3 (new stones% (list stone0)))
 
 #|---------------------------------------
                   WORLDS
@@ -679,7 +811,7 @@
                      (this . throw-stone . pos)
                      (this . throw-stone . to-from-vel
                            (new posn% (this . goal-x) D2B)
-                           10)))] ;; Temporary constant speed
+                           10)))] ;; ____ Temporary constant speed
           [else (new throw-world%
                      (this . scores)
                      (this . thrown-stones)

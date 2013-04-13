@@ -1,6 +1,10 @@
 #lang class/2
 (require 2htdp/image class/universe)
 
+;; All physics calculations are computed using SI units (meters, s, kg)
+;; All drawing is converted into pixels
+;; Conventiently, all dimensions for curling are in feet
+
 #|---------------------------------------
                CONSTANTS
 ---------------------------------------|#
@@ -13,9 +17,31 @@
 (define MPF .3048)
 ;; Convert feet to pixels
 (define PPF (* PPM MPF))
+;; Tick rate (s/tick)
+(define TICK-RATE 1/28)
 
-;; Frictional force
+;; Threshold for velocity below which is considered stopped (m/s)
+(define STOP-THRESH 0.05)
+
+;; Gravity (-9.81 m/s^2)
+(define GRAV -9.81)
+;; Mass of stone (~19 kg)
+(define STONE-MASS 19)
+;; Normal force of stone/ice
+(define F-NORM (* STONE-MASS GRAV))
+;; Coefficient of friction (0.0168)
+(define FRIC 0.0168)
+;; Frictional force (N)
+(define F-FRIC (* FRIC F-NORM))
+;; Acceleration (deceleration) due to friction (m/s^2)
+;; a = F/m
+(define ACC-FRIC (/ F-FRIC STONE-MASS))
+#|
+;; Deceleration per tick (m/tick^2)
+(define TICK-ACC (* ACC-FRIC (sqr TICK-RATE)))
+|#
 ;; Effect of sweep (reduce curl, increase velocity)
+;; _________
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -55,7 +81,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; POSITIONS (in pixels)
-;; All positions are relative to the top of the sheet (descriptives are from center of this house)
+;; All positions are relative to the top left of the sheet
+;; (descriptives are from center of this house)
 ;; THAT refers to throwing end of sheet
 ;; THIS refers to target end of sheet
 
@@ -137,7 +164,6 @@
      0 THIS-HOG-POS-p WIDTH-p THIS-HOG-POS-p 'black)
     0 THIS-TLINE-POS-p WIDTH-p THIS-TLINE-POS-p 'black)
    CNTR-POS-p 0 CNTR-POS-p LENGTH-p 'black))
-SHEET-IMG
 
 ;; Height of game window
 (define GAME-HEIGHT (* 2 WIDTH))
@@ -150,7 +176,7 @@ SHEET-IMG
 (define GAME-WIDTH-p (* GAME-WIDTH PPM))
 
 ;; Scoreboard
-;; Board makes the background of red, white, and blue
+;; Board makes the background of red, white, and blue (helper)
 (define BOARD
   (place-image (rectangle GAME-WIDTH-p (* 1.5 PPF) 'solid 'blue)
                (* .5 GAME-WIDTH-p) (* 0.75 PPF)
@@ -158,6 +184,7 @@ SHEET-IMG
                             (* .5 GAME-WIDTH-p) (* 3.75 PPF)
                             (rectangle GAME-WIDTH-p (* 4.5 PPF) 'solid 'white))))
 
+;; Scoreboard is the board with lines and numbers
 (define SCOREBOARD
   (local [(define (add-num-line n base) ;; add lines to the background
             (local [(define x (- GAME-WIDTH-p (* n SCR-W-p)))]
@@ -180,6 +207,7 @@ SHEET-IMG
 ---------------------------------------|#
 
 ;; A Posn is a (new posn% Number Number)
+;; A Posn has a x and y coordinate, representing a position
 (define-class posn%
   (fields x y)
   
@@ -213,13 +241,14 @@ SHEET-IMG
   (check-expect (p1 . find-normal p1)
                 (new vector% 0 0))
   (check-expect (p2 . find-normal p1)
-                (new vector% 7 6))
-  )
+                (new vector% 7 6)))
 
 ;; Examples:
 (define p0 (new posn% 0 0))
 (define p1 (new posn% 10 10))
 (define p2 (new posn% 3 4))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; A Vector is a (new vec% Number Number)
 ;; Which represents a vector of a velocity, giving the x and y components
@@ -302,56 +331,88 @@ SHEET-IMG
   (check-expect (vec2 . normal)
                 (new vector% -10 10))
   
-  ;; unit-normal : Vector -> Vector
-  ;; Create a unit normal vector in the direction of norm
-  (define (unit-normal norm)
-    (norm . unit))
-  
-  ;; unit-tangent : Vector -> Vector
-  ;; Create a unit vector tangent to norm
-  
   ;; comp-normal : Vector -> Number
   ;; A scalar of the component of the vector in the direction of the normal
   (define (comp-normal norm)
     ((norm . unit) . dot this))
+  (check-expect (vec0 . comp-normal vec1) 0)
+  (check-within (vec3 . comp-normal vec3) (sqrt 2) 0.001)
+  (check-within (vec1 . comp-normal vec3) (sqrt 24.5) 0.001)
+  (check-expect (vec3 . comp-normal vec1) 7/5)
+  (check-expect (vec1 . comp-normal (new vector% 4 -3)) 0)
+  (check-within (vec3 . comp-normal vec2) (sqrt 2) 0.001)
   
   ;; comp-tangent Vector : -> Vector
   ;; A scalar of the component of the vector tangential to the normal
   (define (comp-tangent norm)
     ((norm . unit . normal) . dot this))
+  (check-expect (vec0 . comp-tangent vec1) 0)
+  (check-expect (vec1 . comp-tangent vec1) 0)
+  (check-within (vec3 . comp-tangent vec2) 0 0.001)
+  (check-expect (vec3 . comp-tangent vec1) -1/5)
+  (check-within (vec1 . comp-tangent vec2) (sqrt 0.5) 0.001)
   
   ;; col-comp-normal : Vector Vector Number Number -> Number
   ;; Produce the normal component of this after colliding with that
-  ;; this has maass m1; that has mass m2
+  ;; this has mass m1; that has mass m2
   ;; norm is the normal vector between the 2 objects
+  ;; For curling, masses will always be equal (at 19kg)
   (define (col-comp-normal norm that m1 m2)
     (/ (+ (* (this . comp-normal norm) (- m1 m2))
           (* 2 m2 (that . comp-normal norm)))
        (+ m1 m2)))
+  (check-expect (vec0 . col-comp-normal vec1 vec1 10 10) 5)
+  (check-expect (vec0 . col-comp-normal vec1 vec1 5 10) 20/3)
+  (check-expect (vec2 . col-comp-normal vec1 vec1 5 10) 2)
+  (check-expect (vec2 . col-comp-normal vec1 vec3 5 10) -14/5)
   
   ;; col-vel/norm : Vector Vector Number Number -> Vector
   ;; Compute the velocity of this after colliding with that
   ;; norm is the normal vector between the 2 objects
   (define (col-vel/norm norm that m1 m2)
-    ((norm . unit-normal . scale
+    ((norm . unit . scale
           (this . col-comp-normal norm that m1 m2))
      . add
-     (norm . unit-tangent . scale
+     (norm . normal . unit . scale
             (this . comp-tangent norm))))
+  (check-expect (vec0 . col-vel/norm vec1 vec1 10 10)
+                (new vector% 3 4))
+  (check-expect (vec2 . col-vel/norm vec1 vec0 5 10)
+                (new vector% -6/5 -74/15))
+  (check-expect (vec2 . col-vel/norm vec1 vec1 10 10)
+                (new vector% 23/5 14/5))
   
   ;; col-vel : Posn Posn Vector Number Number -> Vector
   ;; Compute velocity of this after colliding with that
   ;; given the positions of this (p1) and that (p2)
   (define (col-vel p1 p2 that m1 m2)
-    (col-vel/norm (p1 . find-norm p2) that m1 m2))
-  )
+    (col-vel/norm (p1 . find-normal p2) that m1 m2))
+  (check-expect (vec0 . col-vel p1 p2 vec0 10 10)
+                (new vector% 0 0))
+  (check-within (vec1 . col-vel p1 p2 vec1 10 10)
+                (new vector% 3 4) 0.001)
+  
+  ;; acc : Number -> Vector
+  ;; Accelerate the vector by the given acceleration
+  (define (acc a)
+    (this . scale (/ (+ (this . magnitude) a)
+                     (this . magnitude))))
+  (check-expect (vec1 . acc 0) vec1)
+  (check-within (vec2 . acc 1)
+                (new vector% (+ 10 (sqrt .5)) (+ 10 (sqrt .5))) 0.01)
+  (check-expect (vec1 . acc 1)
+                (new vector% 18/5 24/5)))
 
 ;; Examples:
 (define vec0 (new vector% 0 0))
 (define vec1 (new vector% 3 4))
 (define vec2 (new vector% 10 10))
+(define vec3 (new vector% 1 1))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; A Score is a (new score% Number String Number)
+;; Represents the score of a team from a particular end
 ;; Where end is the number of the end in the game
 ;;   and name is the name of the team whose scored (false means no score)
 ;;   and score is the number of points scored
@@ -359,12 +420,12 @@ SHEET-IMG
   (fields end name score))
 
 ;; Examples
-(define score1
-  (new score% 1 "A" 4))
-(define score2
-  (new score% 3 "B" 1))
+(define score1 (new score% 1 "A" 4))
+(define score2 (new score% 3 "B" 1))
+(define score3 (new score% 8 "B" 8))
 
 ;; A Scores is a (new scores% [Listof Score])
+;; Represents the scores of all ends of the game thus far
 ;; Where each element of scores is the score of an end, in order
 ;; If an end # is not in the list, it means that was a blank end
 (define-class scores%
@@ -378,15 +439,21 @@ SHEET-IMG
                  (+ (n . score) base)
                  base))
            0 (this . scores)))
+  (check-expect (scores1 . total-score "A") 4)
+  (check-expect (scores1 . total-score "B") 1)
+  (check-expect (scores1 . total-score "C") 0)
+  (check-expect (scores2 . total-score "B") 9)
   
   ;; winner : String String -> String
   ;; Return the name of the team with the most points
   ;; Given the names of the 2 teams
   (define (winner team1 team2)
-    (if (> (this . total-score(team1))
-           (this . total-score(team2)))
-        team1
-        team2))
+    (cond [(> (this . total-score team1)
+              (this . total-score team2)) team1]
+        [else team2]))
+  (check-expect (scores1 . winner "A" "B") "A")
+  (check-expect (scores2 . winner "A" "B") "B")
+  (check-expect (scores1 . winner "C" "B") "B")
   
   ;; draw-scores : String String -> Image
   ;; Draw the scores onto the scoreboard (team1 on top, team2 on bottom)
@@ -418,12 +485,14 @@ SHEET-IMG
                                 (* 3.75 MPF)
                                 (foldr draw-score
                                        SCOREBOARD
-                                       (this . scores))))))
-  )
+                                       (this . scores)))))))
 
 ;; Examples:
 (define scores1 (new scores%
                      (list score1 score2)))
+(define scores2 (new scores% 
+                     (list score1 score2 score3)))
+
 
 #|---------------------------------------
                  STONES
@@ -473,11 +542,19 @@ SHEET-IMG
   
   ;; move : -> Stone
   ;; Move the stone according to its velocity and curl
+  (define (move)
+    (new stone%
+         (this . team)
+         (+ (this . pos . x) (this . vel . x))
+         (+ (this . pos . y) (this . vel . y))
+         (this . curl)
+         (this . vel . acc ACC-FRIC)))
+  ;;______ Needs change due to curl
   
   ;; stopped? : -> Boolean
   ;; Is the stone stopped? (Below a certain velocity threshold)
   (define (stopped?)
-    (< (this . vel . magnitude) 0.5))
+    (< (this . vel . magnitude) STOP-THRESH))
   
   ;; distance-to-button : -> Number
   ;; How far is the Stone from the center of the house?
@@ -510,6 +587,40 @@ SHEET-IMG
                           base))
            scn
            (this . stones)))
+  
+  ;; sitting : -> [or String false]
+  ;; Return the name of the team with Stone closest to the button
+  ;; Return false if no stones are in the house
+  (define (sitting)
+    (local [(define clst (this . closest))]
+      (cond [(boolean? clst) clst]
+            [else (clst . name)])))
+  
+  ;; closest : -> [or false Stone]
+  ;; Find the closest stone to the center of the house
+  ;; Return false if none are in the house
+  (define (closest)
+    (local [(define (get-closer s base)
+              (cond [(and (s . in-house?)
+                          (or (boolean? base)
+                              (< (s . distance-to-button)
+                                 (base . distance-to-button))))
+                     s]
+                    [else base]))]
+      (foldr get-closer false (this . stones))))
+  
+  ;; closest/team : String -> Stone
+  ;; Return the Stone closest to the center of the house for the given team
+  
+  
+  ;; total-sitting : -> Number
+  ;; Return the the total number of points for the team that is sitting
+  ;; How many stones they have closer to the button than any of their
+  ;; opponent's stones
+  #;(define (total-sitting)
+    (local [(define s-team (this . stones . sitting))
+            (define closest-opp)]
+      ()))
   )
 
 #|---------------------------------------

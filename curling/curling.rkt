@@ -802,13 +802,77 @@
 ;; An abstract World for all worlds during an end:
 ;; - ThrowWorld (throwing stone)
 ;; - SlideWorld (while stone is sliding)
-;; - Between ThrowWorld (after all stones have stopped, before throwing again)
+
 ;; An EndWorlds is a (new end-worlds% [Listof Score] Stones Stones)]
 ;; Where scores is a list of who scored in each end
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end
+;;   and curl is the direction of the stone's curl ('left or 'right)
 (define-class end-worlds%
-  (fields scores thrown-stones unthrown-stones))
+  (fields scores thrown-stones unthrown-stones curl)
+  
+  ;; to-draw : -> Image
+  ;; Current stone centered left window
+  ;; Scoreboard at the bottom
+  ;; House on the left
+  ;; Overview of sheet on far left
+  ;;> Need velocity indicator
+  (define (to-draw)
+    (local
+      [(define sheet/stones
+         (this . thrown-stones . draw-all
+               (this . unthrown-stones . draw-all
+                     (this . slide-stone . draw SHEET-IMG))))
+       (define scaled-sheet (frame (scale SCALE sheet/stones)))
+       (define target-sheet
+         (frame (crop 0 (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
+                      WIDTH-p VIEW-HT-p
+                      sheet/stones)))
+       (define view-sheet
+         (frame (crop 0
+                      (min (max (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
+                                (this . slide-stone . pos . y))
+                           (- LENGTH-p VIEW-HT-p))
+                      WIDTH-p VIEW-HT-p
+                      sheet/stones)))
+       (define scores-img
+         (frame (this . scores . draw)))
+       (define r-arrow
+         (beside (rectangle PPF (* .25 PPF) 'solid 'white)
+                 (rotate -90 (triangle (* .75 PPF) 'solid 'white))))
+       (define set-curl-img
+         (frame
+          (overlay/offset
+           (overlay (rotate 180 r-arrow)
+                    (rectangle (* 2.25 PPF)(* 1.5 PPF) 'solid
+                               (if (symbol=? (this . curl) 'left)
+                                   'red 'dimgray)))
+           (* .1 WIDTH-p) (* -.125 SCR-HT-p)
+           (overlay/offset
+            (overlay r-arrow (rectangle (* 2.25 PPF)(* 1.5 PPF) 'solid
+                                        (if (symbol=? (this . curl) 'left)
+                                            'red 'dimgray)))
+            (* -.1 WIDTH-p) (* -.125 SCR-HT-p)
+            (overlay/offset
+             (text "Curl:" (round (* 1.25 PPF)) 'black)
+             0 (* .25 SCR-HT-p)
+             (rectangle (* .5 WIDTH-p) SCR-HT-p 'solid 'white))))))]
+      (place-image
+       view-sheet
+       (/ WIDTH-p 2) (/ VIEW-HT-p 2)
+       (place-image
+        target-sheet
+        (+ (/ WIDTH-p 2) WIDTH-p) (/ VIEW-HT-p 2)
+        (place-image
+         scaled-sheet
+         (+ (/ (image-width scaled-sheet) 2) (* 2 WIDTH-p)) (/ GAME-HT-p 2)
+         (place-image
+          scores-img
+          (/ SCR-WIDTH-p 2) (+ (/ SCR-HT-p 2) VIEW-HT-p)
+          (place-image
+           set-curl-img
+           (* 1.75 WIDTH-p) (+ (* .5 SCR-HT-p) VIEW-HT-p)
+           BG))))))))
 
 ;; A World in which the player is throwing a Stone
 ;; A ThrowWorld is a
@@ -817,22 +881,27 @@
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end
 ;;   and throw-stone is the stone being thrown
-;;   and curl is the direction of the curl ("left" or "right")
+;;   and curl is the direction of the curl ('left or 'right)
 (define-class throw-world%
   (super end-worlds%)
-  (fields throw-stone goal-x curl)
-  
-  ;; to-draw : -> Image
-  ;; Current stone in main area
-  ;; Full sheet on side, complete with all stones
-  ;; Scores
-  ;; Indicator of curl direction
+  (fields throw-stone goal-x)
   
   ;; on-tick : -> World
   ;; Produce the next world state
+  ;;> If stone being dragged, move it back
+  ;;> else this
   
   ;; on-mouse : MouseEvent Number Number -> World
   ;; Mouse x position is the target of the stone (at this t-line)
+  ;;> If click on buttons: set curl
+  ;;> If mouse over target sheet:
+  ;;>    show position of goal there
+  ;;> If mouse over view sheet:
+  ;;>    show position of goal there/target sheet
+  ;;> If click and drag while within view/target sheets:
+  ;;>    pull stone back so increase velocity
+  ;;> If release mouse (in this region):
+  ;;>    Set velocity (based on distance back from hack/start) and throw (new slide-world% ...)
   (define (on-mouse me x y)
     (cond [(mouse=? me "button-down")
            (new slide-world%
@@ -865,11 +934,7 @@
              (this . throw-stone)
              (this . goal-x)
              ke)
-        this))
-  
-  ;; on-tick : -> World
-  ;; Nothing happens when the world ticks
-  (define (on-tick) this))
+        this)))
 
 ;; A World in which player is directing thrown stone
 ;; A SlideWorld is a
@@ -882,63 +947,17 @@
   (super end-worlds%)
   (fields slide-stone)
   
-  ;; to-draw : -> Image
-  ;; Current stone centered left window
-  ;; Scoreboard at the bottom
-  ;; House on the left
-  ;; Overview of sheet on far left
-  ;;> Need velocity indicator, curl indicator/buttons
-  (define (to-draw)
-    (local [(define sheet/stones
-              (this . thrown-stones . draw-all
-                    (this . unthrown-stones . draw-all
-                          (this . slide-stone . draw SHEET-IMG))))
-            (define scaled-sheet (scale SCALE sheet/stones))
-            (define target-sheet
-              (frame (crop 0 (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
-                           WIDTH-p VIEW-HT-p
-                           sheet/stones)))
-            (define view-sheet
-              (frame (crop 0 (max (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
-                                  (this . slide-stone . pos . y))
-                           WIDTH-p VIEW-HT-p
-                           sheet/stones)))
-            (define scores-img
-              (this . scores . draw))]
-      (place-image view-sheet
-                   (/ WIDTH-p 2) (/ VIEW-HT-p 2)
-                   (place-image target-sheet
-                                (+ (/ WIDTH-p 2) WIDTH-p) (/ VIEW-HT-p 2)
-                                (place-image scaled-sheet
-                                             (+ (/ (image-width scaled-sheet) 2) (* 2 WIDTH-p)) (/ GAME-HT-p 2)
-                                             (place-image scores-img
-                                                          (/ SCR-WIDTH-p 2) (+ (/ SCR-HT-p 2) VIEW-HT-p)
-                                                          BG))))))
-  
   ;; on-tick : -> World
-  ;; Produce the next world state (moving stone)
+  ;; Produce the next world state
+  ;;> Move the current stone
+  ;;> Check for and act upon any collisions:
+  ;;>    Within the set of thrown stones
+  ;;>    Between the slide-stone and thrown-stones
+  ;;> If all stones (slide-stone and thrown-stones) are stopped
+  ;;>    (new throw-world%) , move next stone into position
   
   ;; on-mouse : MouseEvent Number Number -> World
   ;; Click and drag to sweep in front of the stone
-  )
-
-;; A world showing the house between throws
-;; A BetweenThrowWorld is a (new between-throw-world% Scores Stones Stones)
-;; Where scores is a list of who scored in each end
-;;   and thrown-stones is a list of the stones in play at the other end
-;;   and unthrown-stones are the stones remaining in the end
-(define-class between-throw-world%
-  (super end-worlds%)
-  ;; to-draw : -> Image
-  ;; House
-  ;; Full sheet on side, complete with all stones
-  ;; Scores
-  
-  ;; on-tick : -> World
-  ;; Same world (is this necessary?)
-  
-  ;; on-mouse : MouseEvent Number Number -> World
-  ;; Click to switch to throwing new stone
   )
 
 #|---------------------------------------

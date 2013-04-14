@@ -12,7 +12,7 @@
 ;; PHYSICS CONSTANTS
 
 ;; Number of pixels per meter in real curling dimensions
-(define PPM 100)
+(define PPM 65)
 ;; Feet to meters conversion
 (define MPF .3048)
 ;; Convert feet to pixels
@@ -36,7 +36,8 @@
 ;; Acceleration (deceleration) due to friction (m/s^2)
 ;; a = F/m
 (define ACC-FRIC (/ F-FRIC STONE-MASS))
-;; Effect of sweep (reduce curl, increase velocity)
+;; Effect of sweep
+;; (reduce curl, increase velocity by reducing co-efficient of friction)
 ;; _________
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -138,7 +139,7 @@
 ;; Scoreboard width
 (define SCR-WIDTH-p (* 1.5 WIDTH-p))
 ;; Height of visible area of sheet (back line to hog line)
-(define VIEW-HT-p (+ THIS-HOG-POS-p THIS-TLINE-POS-p (* 3 STONE-R-p)))
+(define VIEW-HT-p (+ (- THIS-HOG-POS-p THIS-BACKLINE-POS-p) (* 3 STONE-R-p)))
 ;; Height of game window
 (define GAME-HT-p (+ SCR-HT-p VIEW-HT-p))
 ;; Scaling factor for small sheet
@@ -149,7 +150,7 @@
 (define GAME-WIDTH-p (+ (* 2 WIDTH-p) SM-WIDTH-p))
 
 ;; Background on which to place all the other stuff
-(define BG (empty-scene GAME-WIDTH-p GAME-HT-p))
+(define BG (rectangle GAME-WIDTH-p GAME-HT-p 'solid 'gray))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -887,23 +888,32 @@
   ;; House on the left
   ;; Overview of sheet on far left
   ;;> Need velocity indicator, curl indicator/buttons
-  #;(define (to-draw)
+  (define (to-draw)
     (local [(define sheet/stones
               (this . thrown-stones . draw-all
                     (this . unthrown-stones . draw-all
                           (this . slide-stone . draw SHEET-IMG))))
             (define scaled-sheet (scale SCALE sheet/stones))
             (define target-sheet
-              (crop 0 (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
-                    WIDTH-p VIEW-HT-p
-                    sheet/stones))
+              (frame (crop 0 (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
+                           WIDTH-p VIEW-HT-p
+                           sheet/stones)))
             (define view-sheet
-              (crop 0 (max (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
-                           (this . slide-stone . pos . y))
-                    WIDTH-p VIEW-HT-p
-                    sheet/stones))
+              (frame (crop 0 (max (- THIS-BACKLINE-POS-p (* 2 STONE-R-p))
+                                  (this . slide-stone . pos . y))
+                           WIDTH-p VIEW-HT-p
+                           sheet/stones)))
             (define scores-img
-              (this . scores . ))]))
+              (this . scores . draw))]
+      (place-image view-sheet
+                   (/ WIDTH-p 2) (/ VIEW-HT-p 2)
+                   (place-image target-sheet
+                                (+ (/ WIDTH-p 2) WIDTH-p) (/ VIEW-HT-p 2)
+                                (place-image scaled-sheet
+                                             (+ (/ (image-width scaled-sheet) 2) (* 2 WIDTH-p)) (/ GAME-HT-p 2)
+                                             (place-image scores-img
+                                                          (/ SCR-WIDTH-p 2) (+ (/ SCR-HT-p 2) VIEW-HT-p)
+                                                          BG))))))
   
   ;; on-tick : -> World
   ;; Produce the next world state (moving stone)

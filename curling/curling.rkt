@@ -207,6 +207,11 @@
            (build-list MAX-SCORE
                        (λ (n) (add1 n))))))
 
+;; Right arrow, for indicating curl (rotated for left curl)
+(define r-arrow
+         (beside (rectangle PPF (* .25 PPF) 'solid 'white)
+                 (rotate -90 (triangle (* .75 PPF) 'solid 'white))))
+
 ;; Broom head (for sweeping)
 (define BROOM-IMG (ellipse (/ SCR-HT-p 3) (* .5 PPF) 'solid 'red))
 
@@ -803,11 +808,11 @@
 ;; - ThrowWorld (throwing stone)
 ;; - SlideWorld (while stone is sliding)
 
-;; An EndWorlds is a (new end-worlds% [Listof Score] Stones Stones)]
+;; An EndWorlds is a (new end-worlds% [Listof Score] Stones Stones String)]
 ;; Where scores is a list of who scored in each end
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end
-;;   and curl is the direction of the stone's curl ('left or 'right)
+;;   and curl is the direction of the stone's curl ("left" or "right")
 (define-class end-worlds%
   (fields scores thrown-stones unthrown-stones curl)
   
@@ -817,6 +822,7 @@
   ;; House on the left
   ;; Overview of sheet on far left
   ;;> Need velocity indicator
+  ;;> Drawing broom in slide-world?
   (define (to-draw)
     (local
       [(define sheet/stones
@@ -837,20 +843,17 @@
                       sheet/stones)))
        (define scores-img
          (frame (this . scores . draw)))
-       (define r-arrow
-         (beside (rectangle PPF (* .25 PPF) 'solid 'white)
-                 (rotate -90 (triangle (* .75 PPF) 'solid 'white))))
        (define set-curl-img
          (frame
           (overlay/offset
            (overlay (rotate 180 r-arrow)
                     (rectangle (* 2.25 PPF)(* 1.5 PPF) 'solid
-                               (if (symbol=? (this . curl) 'left)
+                               (if (string=? (this . curl) "left")
                                    'red 'dimgray)))
            (* .1 WIDTH-p) (* -.125 SCR-HT-p)
            (overlay/offset
             (overlay r-arrow (rectangle (* 2.25 PPF)(* 1.5 PPF) 'solid
-                                        (if (symbol=? (this . curl) 'left)
+                                        (if (string=? (this . curl) "left")
                                             'red 'dimgray)))
             (* -.1 WIDTH-p) (* -.125 SCR-HT-p)
             (overlay/offset
@@ -881,7 +884,7 @@
 ;;   and thrown-stones is a list of the stones in play at the other end
 ;;   and unthrown-stones are the stones remaining in the end
 ;;   and throw-stone is the stone being thrown
-;;   and curl is the direction of the curl ('left or 'right)
+;;   and curl is the direction of the curl ("left" or "right")
 (define-class throw-world%
   (super end-worlds%)
   (fields throw-stone goal-x)
@@ -896,10 +899,10 @@
   ;;> If click on buttons: set curl
   ;;> If mouse over target sheet:
   ;;>    show position of goal there
-  ;;> If mouse over view sheet:
-  ;;>    show position of goal there/target sheet
+  ;;> If leave target sheet area:
+  ;;>    Set goal to last mouse-x
   ;;> If click and drag while within view/target sheets:
-  ;;>    pull stone back so increase velocity
+  ;;>    pull stone back to increase velocity (Have maximum amount back)
   ;;> If release mouse (in this region):
   ;;>    Set velocity (based on distance back from hack/start) and throw (new slide-world% ...)
   (define (on-mouse me x y)
@@ -913,7 +916,7 @@
                      (this . throw-stone . pos)
                      (this . throw-stone . to-from-vel
                            (new posn% (this . goal-x) D2B)
-                           10)))] ;; ____ Temporary constant speed
+                           10)))] ;;> Temporary constant speed
           [else (new throw-world%
                      (this . scores)
                      (this . thrown-stones)
@@ -924,6 +927,7 @@
   
   ;; on-key : KeyEvent -> World
   ;; Left and right arrows set curl of stone
+  ;;> This might go away (or just be alternative to mouse)
   (define (on-key ke)
     (if (or (string=? ke "right")
             (string=? ke "left"))
@@ -958,6 +962,11 @@
   
   ;; on-mouse : MouseEvent Number Number -> World
   ;; Click and drag to sweep in front of the stone
+  ;;> If drag (on target or view sheet):
+  ;;>   Effect of sweep is inversely proportional to distance in front of stone
+  ;;>                      proportional to speed of sweeping
+  ;;> If broom hits stone:
+  ;;>    Stone burned; go to (new throw-world% ...)
   )
 
 #|---------------------------------------
@@ -971,13 +980,17 @@
   (fields scores)
   
   ;; to-draw : -> Image
-  ;; Draw scores centered on screen
+  ;;> Draw scores centered on screen
+  ;;> Say click/press any key to continue
   
   ;; on-tick : -> World
-  ;; Same world (is this necessary?)
+  ;;> Same world (is this necessary?)
   
   ;; on-mouse : MouseEvent Number Number -> World
-  ;; Click to start new end
+  ;;> Click to start new end
+  
+  ;; on-key : KeyEvent -> World
+  ;;> Press any key to continue
   )
 
 ;; A World for after the game ends
@@ -986,9 +999,15 @@
   (fields scores)
   
   ;; to-draw : -> Image
-  ;; Draw scores centered on screen; say who the winner is
+  ;;> Draw scores centered on screen; say who the winner is
+  ;;> Press key/click to start new game
   
   ;; on-tick : -> World
   ;; Same world (is this necessary?)mber Number -> World
-  ;; Click to start new end
+  
+  ;; on-key : KeyEvent -> World
+  ;;> Start new game if some key pressed
+  
+  ;; on-mouse : MouseEvent Number Number -> World
+  ;;> Click to start new end
   )

@@ -178,18 +178,20 @@
       (add-line
        (add-line
         (add-line
-         (place-image HOUSE-IMG
-                      CNTR-POS-p THIS-TLINE-POS-p
-                      (place-image HOUSE-IMG
-                                   CNTR-POS-p THAT-TLINE-POS-p
-                                   (rectangle WIDTH-p LENGTH-p 'solid 'white)))
-         0 THAT-BACKLINE-POS-p WIDTH-p THAT-BACKLINE-POS-p 'black)
-        0 THAT-HOG-POS-p WIDTH-p THAT-HOG-POS-p 'black)
-       0 THAT-TLINE-POS-p WIDTH-p THAT-TLINE-POS-p 'black)
-      0 THIS-BACKLINE-POS-p WIDTH-p THIS-BACKLINE-POS-p 'black)
-     0 THIS-HOG-POS-p WIDTH-p THIS-HOG-POS-p 'black)
-    0 THIS-TLINE-POS-p WIDTH-p THIS-TLINE-POS-p 'black)
-   CNTR-POS-p 0 CNTR-POS-p LENGTH-p 'black))
+         (add-line
+          (place-image HOUSE-IMG
+                       CNTR-POS-p THIS-TLINE-POS-p
+                       (place-image HOUSE-IMG
+                                    CNTR-POS-p THAT-TLINE-POS-p
+                                    (rectangle WIDTH-p LENGTH-p 'solid 'white)))
+          0 THAT-BACKLINE-POS-p WIDTH-p THAT-BACKLINE-POS-p 'black)
+         0 THAT-HOG-POS-p WIDTH-p THAT-HOG-POS-p 'black)
+        0 THAT-TLINE-POS-p WIDTH-p THAT-TLINE-POS-p 'black)
+       0 THIS-BACKLINE-POS-p WIDTH-p THIS-BACKLINE-POS-p 'black)
+      0 THIS-HOG-POS-p WIDTH-p THIS-HOG-POS-p 'black)
+     0 THIS-TLINE-POS-p WIDTH-p THIS-TLINE-POS-p 'black)
+    CNTR-POS-p 0 CNTR-POS-p LENGTH-p 'black)
+   (- CNTR-POS-p (* 2 PPF)) THAT-HACK-POS-p (+ CNTR-POS-p (* 2 PPF)) THAT-HACK-POS-p 'black))
 
 ;; Scoreboard is the board with lines and numbers
 (define SCOREBOARD

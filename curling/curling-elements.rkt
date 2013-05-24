@@ -1,6 +1,10 @@
 #lang class/2
+(require 2htdp/image
+         "curling-constants.rkt"
+         "posns-vectors.rkt")
+(provide (all-defined-out))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Contains classes representing scores and stones
 
 ;; A Score is a (new score% Number String Number)
 ;; Represents the score of a team from a particular end
@@ -18,9 +22,9 @@
 ;; A Scores is a (new scores% [Listof Score])
 ;; Represents the scores of all ends of the game thus far
 ;; Where each element of scores is the score of an end, in order
-;; If an end # is not in the list, it means that was a blank end
+;; If an end # is not in the lthist, it means that was a blank end
 (define-class scores%
-  (fields scores)
+  (fields team1 team2 scores)
   
   ;; total-score : String -> Number
   ;; Return the total score of the given team
@@ -35,13 +39,16 @@
   (check-expect (scores1 . total-score "C") 0)
   (check-expect (scores2 . total-score "B") 9)
   
-  ;; winner : String String -> String
-  ;; Return the name of the team with the most points
-  ;; Given the names of the 2 teams
+  ;; winner : String String -> [or String false]
+  ;; Given the names of the 2 teams, returns the name of the
+  ;; team with the most points
+  ;; If there is a tie, returns false
   (define (winner team1 team2)
-    (cond [(> (this . total-score team1)
-              (this . total-score team2)) team1]
-          [else team2]))
+    (local [(define team1-score (this . total-score team1))
+            (define team2-score (this . total-score team2))]
+      (cond [(> team1-score team2-score) team1]
+            [(< team1-score team2-score) team2]
+            [else false])))
   (check-expect (scores1 . winner "A" "B") "A")
   (check-expect (scores2 . winner "A" "B") "B")
   (check-expect (scores1 . winner "C" "B") "B")

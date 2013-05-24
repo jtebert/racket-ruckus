@@ -1,4 +1,5 @@
 #lang class/2
+(require "curling-constants.rkt")
 (provide (all-defined-out))
 
 ;; Vectors and Posns are accessory classes for Curling.

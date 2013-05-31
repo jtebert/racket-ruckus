@@ -24,7 +24,7 @@
 ;; Where each element of scores is the score of an end, in order
 ;; If an end # is not in the lthist, it means that was a blank end
 (define-class scores%
-  (fields team1 team2 scores)
+  (fields scores)
   
   ;; total-score : String -> Number
   ;; Return the total score of the given team
@@ -64,13 +64,13 @@
                               name-width)
                            base
                            (text team n 'white)))
-                     (text team (round PPF) 'white)
-                     (build-list (round PPF) (λ (x) (add1 x)))))
+                     (text team (inexact->exact (round PPF)) 'white)
+                     (build-list (inexact->exact (round PPF)) (λ (x) (add1 x)))))
             ;; draw scores onto the base image
             (define (draw-scores scrs bg t1-scr t2-scr)
               (cond [(empty? scrs) bg]
                     [else (place-image
-                            (overlay (text (number->string ((first scrs) . end)) (round PPF) 'black)
+                            (overlay (text (number->string ((first scrs) . end)) (inexact->exact (round PPF)) 'black)
                                      (rectangle (* .9 PPF) (* .9 SCR-W-p) 'solid 'white))
                             (+ (- SCR-WIDTH-p
                                   (* (- MAX-SCORE
@@ -96,7 +96,7 @@
 ;; Examples:
 (define scores1 (new scores%
                      (list score1 score2)))
-(define scores2 (new scores% 
+(define scores2 (new scores%
                      (list score1 score2 score3)))
 
 
@@ -130,20 +130,13 @@
 (define-class stone%
   (fields team pos vel curl rot)
   
-  ;; draw/color : String Image -> Image
+  ;; draw : String Image -> Image
   ;; Draw an Image of the Stone with the given color
   ;; at the correct location and rotation
-  (define (draw/color color scn)
-    (place-image (rotate (this . curl)
-                         (overlay/offset
-                          (overlay/align/offset
-                           "middle" "top"
-                           (ellipse (* .4 STONE-R-p) (* .4 STONE-R-p) 'solid color)
-                           0 (* .1 STONE-R-p)
-                           (ellipse (* .3 STONE-R-p) STONE-R-p 'outline 'black))
-                          0 (* .1 STONE-R-p)
-                          (overlay (circle (* .65 STONE-R-p) 'solid color)
-                                   (circle STONE-R-p 'solid 'gray))))
+  (define (draw team scn)
+    (place-image (rotate (this . rot)
+                         (stone-img (if (string=? team (this . team))
+                                        'red 'blue)))
                  (* (this . pos . x) PPM)
                  (* (this . pos . y) PPM)
                  scn))
@@ -164,21 +157,25 @@
   
   ;; move : -> Stone
   ;; Move the stone according to its velocity and curl
-  ;; Set velocity to 0 if stone is below stop threshold
-  ;;> Needs change due to curl
+  ;; Set velocity and curl to 0 if stone is below stop threshold
+  ;;> Needs change due to curl, change in friction from sweeping
   (define (move)
     (if (this . stopped?)
         (new stone%
              (this . team)
-             (this . pos . x) (this . pos . y)
-             (this . curl)
-             (new vector% 0 0))
+             (this . pos)
+             (new vector% 0 0)
+             0
+             (this . rot))
         (new stone%
              (this . team)
-             (+ (this . pos . x) (this . vel . x))
-             (+ (this . pos . y) (this . vel . y))
+             (new posn%
+                  (+ (this . pos . x) (this . vel . x))
+                  (+ (this . pos . y) (this . vel . y)))
+             (this . vel . acc ACC-FRIC)
              (this . curl)
-             (this . vel . acc ACC-FRIC))))
+             (+ (this . rot)
+                (* TICK-RATE (this . curl))))))
   
   ;; stopped? : -> Boolean
   ;; Is the stone stopped? (Below a certain velocity threshold)
@@ -214,12 +211,78 @@
   
   ;; in-house? : -> Boolean
   ;; Is the Stone in the house?
-  ;; Any part of the stone tourching the house is in the house
+  ;; Any part of the stone touching the house is in the house
   (define (in-house?)
     (<= (this . distance-to-button) (+ STONE-R R-12FT)))
   (check-expect (stone0 . in-house?) false)
   (check-expect (stone1 . in-house?) true)
-  (check-expect (stone3 . in-house?) false))
+  (check-expect (stone3 . in-house?) false)
+  
+  ;; collision-1? : Stone -> Boolean
+  ;; Is the stone colliding with the given Stone
+  (define (collision-1? stn)
+    (<= (stn . pos . distance (this . pos))
+        (* 2 STONE-R)))
+  
+  ;; collision? : Stones -> Boolean
+  ;; Is the stone colliding with/touching any of the other stones?
+  (define (collision? stns)
+    (ormap (λ (s) (this . collision-1? s)) (stns . stones)))
+  (check-expect (stone0 . collision? stones3) true)
+  (check-expect (stone1 . collision?
+                        (new stones%
+                             (list stone2 stone3 stone4 stone5)))
+                true)
+  (check-expect (stone3 . collision?
+                        (new stones%
+                             (list stone1 stone2 stone4 stone5)))
+                false)
+  (check-expect (stone0 . collision?
+                        (new stones% (list (new stone% "A" (new posn% 0 .25) vec0 0 0))))
+                true)
+  
+  ;; collide-1 : Stone -> Stone
+  ;; Collide this with that Stone and produce this stone, moved
+  ;;> Need to add rotation
+  (define (collide-1 that)
+    (new stone%
+         (this . team)
+         (this . pos)
+         (this . vel . col-vel
+               (this . pos)
+               (that . pos)
+               that
+               STONE-MASS STONE-MASS)
+         (this . curl)
+         (this . rot)))
+  
+  ;; collide-many : Stones -> Stone
+  ;; Collide this Stone with every Stone in those
+  (define (collide-many those)
+    (local [(define (list-coll stn los)
+              (cond [(empty? los)
+                     stn]
+                    [(stn . collision-1? (first los))
+                     (list-coll (stn . collide-1 (first los))
+                                (rest los))]
+                    [else
+                     (list-coll stn (rest los))]))]
+      (list-coll this (those . stones))))
+  
+  ;; torque : Stone -> Number
+  ;; Determine the scalar angular momentum change/adjustment
+  #;(define (torque that)
+    (local
+      [(define v1 (this . vel . scale -1 . unit))
+       (define v2
+         ((new vector%
+               ((this . pos . x) (that . pos . y))
+               ((this . pos . x) (that . pos . y)))
+          . unit))
+       (define s (v1 . dot v2))
+       (define theta (* (/ (acos(s)) pi) 180))]
+      (* )))
+  )
 
 ;; Examples
 (define stone0 (new stone% "A" (new posn% 0 0) vec0 0 0))
@@ -240,9 +303,7 @@
   ;; The stones of the given team are red; other team is blue
   (define (draw-all team scn)
     (foldr (λ (stn base)
-             (if (string=? team (stn . team))
-                 (stn . draw/color 'red base)
-                 (stn . draw/color 'blue base)))
+             (stn . draw team base))
            scn
            (this . stones)))
   ;;> Tested by visual inspection
@@ -358,7 +419,46 @@
   (check-expect (stones0 . total-sitting) 0)
   (check-expect (stones1 . total-sitting) 2)
   (check-expect (stones2 . total-sitting) 3)
-  (check-expect (stones3 . total-sitting) 0))
+  (check-expect (stones3 . total-sitting) 0)
+  
+  ;; end-score : Number -> Score
+  ;; Given the number of the end, return the score of the end
+  (define (end-score end)
+    (new score%
+         end
+         (this . sitting)
+         (this . total-sitting)))
+  
+  ;; any-collisions?: -> Boolean
+  ;; Are there any collisions between stones in the set?
+  (define (any-collisions?)
+    (local [(define (list-ac? stns)
+              (cond [(empty? stns)
+                     false]
+                    [else
+                     (or ((first stns) . collision? (new stones% (rest stns)))
+                         (list-ac? (rest stns)))]))]
+      (list-ac? (this . stones))))
+  (check-expect (stones0 . any-collisions?) false)
+  (check-expect (stones1 . any-collisions?) true)
+  (check-expect ((new stones% (list stone2 stone3 stone4 stone5))
+                 . any-collisions?) false)
+  
+  ;; collide-all : -> Stones
+  ;; Perform collisions on all of the stones in the set
+  ;;> Needs to use same recursion as any-collisions to avoid double hits?
+  ;;> I think this reverses the list?
+  (define (collide-all)
+    (local [(define (list-ca stns acc)
+              (cond [(empty? stns)
+                     acc]
+                    [else
+                     (list-ca (rest stns)
+                              (cons ((first stns) . collide-many
+                                                  (new stones% (rest stns)))
+                                    acc))]))]
+      (new stones% (reverse (list-ca (this . stones) empty)))))
+  )
 
 ;; Examples
 (define stones0 (new stones% empty))
@@ -372,3 +472,31 @@
                            (new stone% "B" (new posn% 5 6) vec0 0 0)
                            (new stone% "B" (new posn% 5 7) vec0 0 0))))
 (define stones3 (new stones% (list stone0)))
+
+;; Starting set of stones for each end
+;; Team1 throws first, Team2 has hammer
+(define (stones-start team1 team2)
+  (local
+    [;; y coordinates of all 16 stones
+     (define ys
+       (build-list 16 (λ (n) (- LENGTH (* 2 STONE-R (add1 (floor (/ n 4))))))))
+     ;; x coordinates of all 16 stones
+     (define xs
+       (build-list 16
+                   (λ (n) (+ (* (modulo n 2) (- WIDTH (* 6 STONE-R)))
+                             (* 2 STONE-R (add1 (floor (/ (modulo n 4) 2))))))))
+     ;; build-stns : [Listof Number] [Listof Number] [Listof Stone] Number -> [Listof Stone]
+     ;; Generate list of all stones
+     (define (build-stns x y stns teamN)
+       (cond [(empty? x)
+              stns]
+             [else
+              (build-stns (rest x) (rest y)
+                          (cons (new stone%
+                                     (if (zero? teamN) team1 team2)
+                                     (new posn% (first x) (first y))
+                                     (new vector% 0 0)
+                                     0 0)
+                                stns)
+                          (modulo (add1 teamN) 2))]))]
+    (new stones% (reverse (build-stns xs ys empty 0)))))

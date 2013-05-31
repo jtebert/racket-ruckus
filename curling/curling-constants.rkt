@@ -39,7 +39,7 @@
 (define ACC-FRIC (/ F-FRIC STONE-MASS))
 ;; Effect of sweep
 ;; (reduce curl, increase velocity by reducing co-efficient of friction)
-;; _________
+;;> _________
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -222,6 +222,19 @@
 
 ;; Broom head (for sweeping)
 (define BROOM-IMG (ellipse (/ SCR-HT-p 3) (* .5 PPF) 'solid 'red))
+
+;; stone-img : String -> Image
+;; Draw a stone with the given color handle
+(define (stone-img color)
+  (overlay/offset
+   (overlay/align/offset
+    "middle" "top"
+    (ellipse (* .4 STONE-R-p) (* .4 STONE-R-p) 'solid color)
+    0 (* .1 STONE-R-p)
+    (ellipse (* .3 STONE-R-p) STONE-R-p 'outline 'black))
+   0 (* .1 STONE-R-p)
+   (overlay (circle (* .65 STONE-R-p) 'solid color)
+            (circle STONE-R-p 'solid 'gray))))
 
 ;; set-curl-img : String -> Image
 ;; Where curl is one of "left" or "right"

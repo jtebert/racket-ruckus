@@ -29,10 +29,17 @@
   ;; to-from-vel : Posn Number -> Vector
   ;;; Make a Posn going from THIS towards THAT at a given speed.
   ;;> This won't actually work right now because of the differences between
-  ;;> Vectors and Posns.  I'll fix then when anything works.
+  ;;> Vectors and Posns.  I'll fix that when anything works.
   (define (to-from-vel that speed)
-    ((this . sub that) . scale
-                       (/ speed (this . distance that))))
+    ((new vector%
+         (- (that . x) (this . x))
+         (- (that . y) (this . y)))
+     . scale
+     (/ speed (this . distance that))))
+  (check-expect (p0 . to-from-vel p2 1)
+                (new vector% 3/5 4/5))
+  (check-expect (p2 . to-from-vel p0 2)
+                (new vector% -6/5 -8/5))
   
   ;; find-normal : Posn -> Vector
   ;; Create a vector with components of the differences between this and that
@@ -210,7 +217,9 @@
   (check-within (vec2 . acc 1)
                 (new vector% (+ 10 (sqrt .5)) (+ 10 (sqrt .5))) 0.01)
   (check-expect (vec1 . acc 1)
-                (new vector% 18/5 24/5)))
+                (new vector% 18/5 24/5))
+  
+  )
 
 ;; Examples:
 (define vec0 (new vector% 0 0))
